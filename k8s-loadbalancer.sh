@@ -404,12 +404,7 @@ function clean_nginx() {
             [[ $DEBUG ]] && echo "[DEBUG ${FUNCNAME[0]:+${FUNCNAME[0]}()} ${LINENO}] can't get k8s service info: ${serviceInfo}."
             return ${RETURN_FAILURE}
         fi
-    done < <(cat ${configPath} | \
-        grep -v "^#" | \
-        sed -e 's/"//g' -e s%\'%%g \
-            -e 's/[[:space:]]//g' \
-            -e '/^$/d' |\
-        sort)
+    done < <(cat ${configPath} | grep -v "^#" | sed -e 's/"//g' -e s%\'%%g -e 's/[[:space:]]//g' -e '/^$/d' |\ sort -u)
 
 
     # 2. 关闭相关的 nginx 配置文件
@@ -636,12 +631,7 @@ function main() {
             # print_info
             :
        fi
-    done < <(cat ${configPath} | \
-        grep -v "^#" | \
-        sed -e 's/"//g' -e s%\'%%g \
-            -e 's/[[:space:]]//g' \
-            -e '/^$/d' |\
-        sort)
+    done < <(cat ${configPath} | grep -v "^#" | sed -e 's/"//g' -e s%\'%%g -e 's/[[:space:]]//g' -e '/^$/d' | sort -u)
     clean_firewall
 }
 
