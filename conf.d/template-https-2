@@ -1,0 +1,29 @@
+upstream iot_north_https {
+}
+server {
+    listen              1443 ssl;
+    server_name         "yeiot.qxis.com";
+
+    ssl_certificate     /etc/nginx/ssl/yeiot.qxis.com.crt;
+    ssl_certificate_key /etc/nginx/ssl/yeiot.qxis.com.key;
+    ssl_session_timeout 5m;
+    ssl_ciphers         ECDH+AESGCM:DH+AESGCM:ECDH+AES256:DH+AES256:ECDH+AES128:DH+AES:ECDH+3DES:DH+3DES:RSA+AESGCM:RSA+AES:RSA+3DES:!aNULL:!MD5:!DSS;
+    ssl_protocols       TLSv1 TLSv1.1 TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers on;
+
+
+    access_log          /var/log/nginx/iot-north-https-access.log;
+
+    if ($http_user_agent ~* (libwww|Wget|LWP|damnBot|BBBike|java|spider|crawl) ) {
+        return 403;
+    }
+
+    location / {
+        proxy_set_header    X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header    X-Forwarded-Proto $scheme;
+        proxy_set_header    X-Real-IP         $remote_addr;
+        proxy_set_header    Host              $http_host;
+        proxy_ssl_session_reuse off;
+        proxy_pass              http://iot_north_https;
+    }
+}

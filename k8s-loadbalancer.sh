@@ -33,7 +33,7 @@ NGINX_CONFIG_ENABLED_TCP_DIR="/etc/nginx/sites-stream"
 NGINX_CONFIG_ENABLED_UDP_DIR="/etc/nginx/sites-stream"
 CHANNEL="/tmp/k8s-loadbalancer"
 
-# declare -ax upstreamIP upstreamAvailIP FIREWAL_WHITELIST
+#declare -ax upstreamIP upstreamAvailIP FIREWAL_WHITELIST
 upstreamIP=(
     10.240.3.21
     10.240.3.22
@@ -208,14 +208,16 @@ function service_handler() {
     # 循环3次，获取 k8s service nodeport
     local count=1
     while true; do
-        local jsonpathString=$(echo jsonpath="{.spec.ports[?(@.port==${servicePort})].nodePort}")
-        serviceNodeport=$(kubectl -n ${serviceNamespace} get service ${serviceName} -o ${jsonpathString})
+        local jsonpathString=$(echo "{.spec.ports[?(@.port==${servicePort})].nodePort}")
+        serviceNodeport=$(kubectl -n ${serviceNamespace} get service ${serviceName} -o jsonpath=${jsonpathString})
+        local commandLine="kubectl -n ${serviceNamespace} get service ${serviceName} -o jsonpath=\'${jsonpathString}\'"
         if [[ -n ${serviceNodeport} ]]; then break; fi
         if [[ ${count} -ge 3 ]]; then break; fi
         sleep 3; (( count++ ))
     done
 
     [[ $DEBUG ]] && {   #========== BEGIN DEBUG
+        echo "[DEBUG ${FUNCNAME[0]:+${FUNCNAME[0]}()} ${LINENO}] -- command line:     ${commandLine}"
         echo "[DEBUG ${FUNCNAME[0]:+${FUNCNAME[0]}()} ${LINENO}] -- nginxListenPort:  ${nginxListenPort}"
         echo "[DEBUG ${FUNCNAME[0]:+${FUNCNAME[0]}()} ${LINENO}] -- serviceName:      ${serviceName}"
         echo "[DEBUG ${FUNCNAME[0]:+${FUNCNAME[0]}()} ${LINENO}] -- serviceNamespace: ${serviceNamespace}"
@@ -284,6 +286,7 @@ function nginx_handler() {
     cp -f ${configDir}/template-${serviceProtocol} \
         ${NGINX_CONFIG_AVAILABLE_DIR}/${serviceName}.${serviceNamespace}:${servicePort}.${serviceProtocol}
     local serverString=""
+    #TODO: 处理一下 upstreamAvailIP 中的 IP 顺序
     for (( i=0; i<${#upstreamAvailIP[@]}; i++ )); do
         serverString="    server ${upstreamAvailIP[i]}:${serviceNodeport};"
         sed -i "/^upstream/a\\${serverString}"  \
@@ -343,8 +346,12 @@ function nginx_handler() {
         ufw allow from ${ip} comment 'whitelist ip'> /dev/null
     done
     # ufw 开放 nginxListenPort 变量值的端口
+    # ufw 防火墙配置的时候只支持 tcp/udp, 当代理 k8s service 时如果使用的是不是 UDP 协议(TCP|HTTP|HTTPS), 统统默认为 TCP
+    if [[ ${serviceProtocol,,} != "udp"   ]]; then serviceProtocol="tcp"; fi
     [[ $DEBUG ]] && echo "[DEBUG ${FUNCNAME[0]:+${FUNCNAME[0]}()} ${LINENO}] -- allow access port: ${nginxListenPort}/${serviceProtocol}"
     ufw allow "${nginxListenPort}/${serviceProtocol}" comment "${serviceName}.${serviceNamespace}" > /dev/null
+    local commandLine="ufw allow \"${nginxListenPort}/${serviceProtocol}\" comment \"${serviceName}.${serviceNamespace}\" > /dev/null"
+    [[ $DEBUG ]] && echo "[DEBUG ${FUNCNAME[0]:+${FUNCNAME[0]}()} ${LINENO}] -- command line:      ${commandLine}"
 
     ufw default deny incoming > /dev/null
     ufw default allow outgoing > /dev/null
@@ -382,6 +389,7 @@ function clean_nginx() {
 
     # 解析配置文件，获取 k8s service 信息
     while read -r serviceInfo; do
+        #sleep 10
         nginxListenPort=` echo ${serviceInfo} | awk -F '[.|:|/]' '{print $1}'`
         serviceName=`     echo ${serviceInfo} | awk -F '[.|:|/]' '{print $2}'`
         serviceNamespace=`echo ${serviceInfo} | awk -F '[.|:|/]' '{print $3}'`
@@ -404,7 +412,7 @@ function clean_nginx() {
             [[ $DEBUG ]] && echo "[DEBUG ${FUNCNAME[0]:+${FUNCNAME[0]}()} ${LINENO}] can't get k8s service info: ${serviceInfo}."
             return ${RETURN_FAILURE}
         fi
-    done < <(cat ${configPath} | grep -v "^#" | sed -e 's/"//g' -e s%\'%%g -e 's/[[:space:]]//g' -e '/^$/d' |\ sort -u)
+    done < <(cat ${configPath} | grep -v "^#" | sed -e 's/"//g' -e s%\'%%g -e 's/[[:space:]]//g' -e '/^$/d' | sort -u)
 
 
     # 2. 关闭相关的 nginx 配置文件
@@ -614,7 +622,7 @@ function main() {
         if [[ -z ${serviceProtocol} ]]; then serviceProtocol="tcp"; fi
 
         [[ $DEBUG ]] && {   #========== BEGIN DEBUG
-            echo -e "\n========== ${serviceName}.${serviceNamespace}:${servicePort}.${serviceProtocol} =========="
+            echo -e "\n---------- ${serviceName}.${serviceNamespace}:${servicePort}.${serviceProtocol}"
             echo "[DEBUG ${FUNCNAME[0]:+${FUNCNAME[0]}()} ${LINENO}] -- nginxListenPort:  ${nginxListenPort}"
             echo "[DEBUG ${FUNCNAME[0]:+${FUNCNAME[0]}()} ${LINENO}] -- serviceName:      ${serviceName}"
             echo "[DEBUG ${FUNCNAME[0]:+${FUNCNAME[0]}()} ${LINENO}] -- serviceNamespace: ${serviceNamespace}"

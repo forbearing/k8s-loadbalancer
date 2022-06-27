@@ -1,5 +1,11 @@
 #!/usr/bin/env bash
 
+os=$(uname -s)
+if [[  $os != "Linux"  ]]; then
+    echo "Not Support OS: $os"
+    exit 1
+fi
+
 # uninstall k8s-loadbalancer
 if [[ $1 == "-u" ]]; then
     systemctl stop k8s-loadbalancer &> /dev/null
