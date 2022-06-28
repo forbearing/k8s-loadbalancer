@@ -26,6 +26,7 @@ WARN=true
 LOOP_TIME="30"
 configDir="/etc/k8s-loadbalancer"
 configPath="${configDir}/k8s-loadbalancer.conf"
+NGINX_CONFIG_HOME_DIR="/etc/nginx"
 NGINX_CONFIG_AVAILABLE_DIR="/etc/nginx/sites-available"
 NGINX_CONFIG_ENABLED_HTTP_DIR="/etc/nginx/sites-enabled"
 NGINX_CONFIG_ENABLED_HTTPS_DIR="/etc/nginx/sites-enabled"
@@ -35,9 +36,9 @@ CHANNEL="/tmp/k8s-loadbalancer"
 
 #declare -ax upstreamIP upstreamAvailIP FIREWAL_WHITELIST
 upstreamIP=(
-    10.240.3.21
-    10.240.3.22
-    10.240.3.23)
+    10.240.2.21
+    10.240.2.22
+    10.240.2.23)
 upstreamAvailIP=()
 FIREWALL_WHITELIST=(10.240.0.100)
 
@@ -165,6 +166,37 @@ function 0_prepare_nginx() {
         mkdir -p ${NGINX_CONFIG_ENABLED_TCP_DIR}; fi
     if [[ ! -d ${NGINX_CONFIG_ENABLED_UDP_DIR} ]]; then
         echo "create directory ${NGINX_CONFIG_ENABLED_UDP_DIR}."; fi
+
+    # 生成证书文件
+    CERTS="${NGINX_CONFIG_HOME_DIR}/ssl"
+    if [[ ! -d ${CERTS} ]]; then
+        rm -rf ${CERTS}
+        mkdir -p ${CERTS}
+        # 创建一个根证书，用它来对服务签署证书
+        openssl req \
+            -newkey rsa:4096 -nodes -sha256 \
+            -x509 -days 3650 \
+            -subj "/C=CN/ST=Shanghai/L=Shanghai/O=devops/OU=devops/CN=example.com/" \
+            -keyout ${CERTS}/example.com.key \
+            -out ${CERTS}/example.com.crt 
+        # 针对 www.example.com 创建证书和私有 key
+        openssl req \
+            -newkey rsa:4096 -nodes -sha256 \
+            -keyout ${CERTS}/www.example.com.key \
+            -out ${CERTS}/www.example.com.csr \
+            -subj "/C=CN/ST=Shanghai/L=Shanghai/O=devops/OU=devops/CN=www.example.com/"
+        openssl x509 \
+            -req -days 365 -set_serial 0 -sha256 \
+            -CA ${CERTS}/example.com.crt \
+            -CAkey ${CERTS}/example.com.key \
+            -in ${CERTS}/www.example.com.csr \
+            -out ${CERTS}/www.example.com.crt
+
+        #kubectl delete secret nginx-server-certs
+        #kubectl create secret tls nginx-server-certs \
+        #    --key=${CERTS}/www.example.com.key \
+        #    --cert=${CERTS}/www.example.com.crt
+    fi
 }
 
 
@@ -256,14 +288,15 @@ function nginx_handler() {
     for ip in "${upstreamIP[@]}"; do
         case ${serviceProtocol} in
         tcp|http|https)
-            [[ $DEBUG ]] && echo "[DEBUG ${FUNCNAME[0]:+${FUNCNAME[0]}()} ${LINENO}] -- nc -vz ${ip} ${serviceNodeport}"
+            [[ $DEBUG ]] && echo "[DEBUG ${FUNCNAME[0]:+${FUNCNAME[0]}()} ${LINENO}] -- nc -G 3 -vz ${ip} ${serviceNodeport}"
             nc -vz ${ip} ${serviceNodeport} &> /dev/null 
             if [[ $? -eq 0 ]]; then upstreamAvailIP+=($ip); fi ;;
         udp)
-            [[ $DEBUG ]] && echo "[DEBUG ${FUNCNAME[0]:+${FUNCNAME[0]}()} ${LINENO}] -- nc -u -vz ${ip} ${serviceNodeport}"
+            [[ $DEBUG ]] && echo "[DEBUG ${FUNCNAME[0]:+${FUNCNAME[0]}()} ${LINENO}] -- nc -w 2 -u -vz ${ip} ${serviceNodeport}"
             nc -u -vz ${ip} ${serviceNodeport} &> /dev/null
             if [[ $? -eq 0 ]]; then upstreamAvailIP+=($ip); fi ;;
-        *)  echo "[ERROR ${FUNCNAME[0]:+${FUNCNAME[0]}()} ${LINENO}] not support service protocol: ${serviceProtocol}, exit failed." && exit $EXIT_FAILURE
+        #*)  echo "[ERROR ${FUNCNAME[0]:+${FUNCNAME[0]}()} ${LINENO}] not support service protocol: ${serviceProtocol}, exit failed." && exit $EXIT_FAILURE
+        *)  echo "[ERROR ${FUNCNAME[0]:+${FUNCNAME[0]}()} ${LINENO}] not support service protocol: ${serviceProtocol}, skipping" && return
         esac
     done
 
