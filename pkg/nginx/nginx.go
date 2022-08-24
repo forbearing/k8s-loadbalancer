@@ -12,6 +12,21 @@ var (
 	stderr = logrus.New().WriterLevel(logrus.ErrorLevel)
 )
 
+// Install will intall the nginx package in linux.
+func Install() error {
+	return executeCommand([]string{"bash", "-c", `
+apt-get update
+apt-get install -y nginx
+	`}, stdout, stderr)
+}
+
+//Remove() will uninstall the nginx package in linux.
+func Remove() error {
+	return executeCommand([]string{"bash", "-c", `
+	apt-get purg nginx
+	`}, stdout, stderr)
+}
+
 // Start will start nginx daemon by systemctl.
 func Start() error {
 	return executeCommand([]string{"systemctl", "start", "nginx"}, stdout, stderr)
