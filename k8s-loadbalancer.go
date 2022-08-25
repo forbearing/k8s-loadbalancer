@@ -60,6 +60,6 @@ func main() {
 
 	handler.InformerFactory().Start(stopCh)
 	if err := ctrl.Run(args.GetNumWorker(), stopCh); err != nil {
-		logrus.Fatal("Err running controller: %s", err.Error())
+		logrus.Fatal("Error running controller: %s", err.Error())
 	}
 }
