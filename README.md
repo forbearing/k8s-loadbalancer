@@ -1,2 +1,5 @@
-## 计划 golang 重写 !!!
+## how to use
 
+
+
+`go run k8s-loadbalancer.go  `
