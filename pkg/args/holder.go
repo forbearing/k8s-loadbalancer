@@ -5,17 +5,17 @@ import "net"
 var lbHolder = &holder{}
 
 type holder struct {
-	port        uint
+	port        int
 	bindAddress net.IP
 	kubeconfig  string
 	logLevel    string
 	logFormat   string
 	logFile     string
 	upstream    []string
-	numWorker   uint
+	numWorker   int
 }
 
-func GetPort() uint          { return lbHolder.port }
+func GetPort() int           { return lbHolder.port }
 func GetBindAddress() net.IP { return lbHolder.bindAddress }
 func GetKubeconfig() string  { return lbHolder.kubeconfig }
 func GetLogLevel() string    { return lbHolder.logLevel }
@@ -28,4 +28,4 @@ func GetUpstream() []string {
 	}
 	return upstream
 }
-func GetNumWorker() uint { return lbHolder.numWorker }
+func GetNumWorker() int { return lbHolder.numWorker }

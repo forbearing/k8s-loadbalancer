@@ -16,14 +16,14 @@ import (
 )
 
 var (
-	argPort       = pflag.Uint("port", 8080, "port to listen to for incoming HTTP requests")
+	argPort       = pflag.Int("port", 8080, "port to listen to for incoming HTTP requests")
 	argBindAddr   = pflag.IP("bind-address", net.IPv4(0, 0, 0, 0), "IP address on which to serve the --port, set to 0.0.0.0 for all interfaces by default")
 	argKubeconfig = pflag.String("kubeconfig", "", "path to kubeconfig file with authorization and master location information")
 	argLogLevel   = pflag.String("log-level", "INFO", "level of API request logging, should be one of   'ERROR', 'WARNING|WARN', 'INFO', 'DEBUG' or 'TRACE'")
 	argLogFormat  = pflag.String("log-format", "TEXT", "specify log format, should be on of 'TEXT' or 'JSON'")
 	argLogFile    = pflag.String("log-output", "/dev/stdout", "specify log file, default output log to /dev/stdout")
 	argUpstream   = pflag.StringSlice("upstream", []string{}, "multiple upstream hosts or IP to which the loadbalancer will proxy traffic, separated by common, eg: --upstream host1,host2,host3 or --upstream 1.1.1.1,2.2.2.2,3.3.3.3 ")
-	argNumWorker  = pflag.Uint("worker", uint(runtime.NumCPU()), "the number of worker goroutines to handle k8s service resources and nginx daemon, default to the number of cpu")
+	argNumWorker  = pflag.Int("worker", runtime.NumCPU(), "the number of worker goroutines to handle k8s service resources and nginx daemon, default to the number of cpu")
 )
 
 func init() {
@@ -59,7 +59,7 @@ func main() {
 	ctrl := controller.NewController(handler.Clientset(), handler.ServiceInformer())
 
 	handler.InformerFactory().Start(stopCh)
-	if err := ctrl.Run(2, stopCh); err != nil {
+	if err := ctrl.Run(args.GetNumWorker(), stopCh); err != nil {
 		logrus.Fatal("Err running controller: %s", err.Error())
 	}
 }

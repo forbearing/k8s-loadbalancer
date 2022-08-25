@@ -12,7 +12,7 @@ type builder struct {
 	*holder
 }
 
-func (b *builder) SetPort(port uint) *builder {
+func (b *builder) SetPort(port int) *builder {
 	b.l.Lock()
 	defer b.l.Unlock()
 	b.port = port
@@ -63,7 +63,7 @@ func (b *builder) SetUpstream(upstream []string) *builder {
 	return b
 }
 
-func (b *builder) SetNumWorker(numWorker uint) *builder {
+func (b *builder) SetNumWorker(numWorker int) *builder {
 	b.l.Lock()
 	defer b.l.Unlock()
 	b.numWorker = numWorker
