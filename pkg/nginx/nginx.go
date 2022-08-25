@@ -3,6 +3,7 @@ package nginx
 import (
 	"io"
 	"os/exec"
+	"sync"
 
 	"github.com/sirupsen/logrus"
 )
@@ -11,19 +12,67 @@ var (
 	stdout = logrus.New().Writer()
 	stderr = logrus.New().WriterLevel(logrus.ErrorLevel)
 )
+var (
+	lock sync.Mutex
+)
 
 // Install will intall the nginx package in linux.
 func Install() error {
+	lock.Lock()
+	defer lock.Unlock()
+
 	return executeCommand([]string{"bash", "-c", `
-apt-get update
-apt-get install -y nginx
+source /etc/os-release
+linuxID=$ID
+linuxMajorVersion=$( echo $VERSION | awk -F'[.| ]' '{print $1}' )
+linuxCodeName=$VERSION_CODENAME
+[ -f /etc/lsb-release ] &&  \
+	linuxMinorVersion=$(cat /etc/lsb-release  | awk -F'=' '/DISTRIB_RELEASE/ {print $2}' | awk -F'.'  '{print $2}')
+[ -f /etc/system-release ] && \
+	linuxMinorVersion=$(cat /etc/system-release | awk '{print $4}' | awk -F'.' '{print $2}')
+
+case $linuxID in 
+ubuntu|debian)
+	if ! command -v nginx &> /dev/null; then
+		apt-get update
+		apt-get install -y nginx
+	fi; ;;
+centos|rocky)
+	if ! command -v nginx &> /dev/null; then
+		yum install -y nginx
+	fi; ;;
+esac
+
 	`}, stdout, stderr)
 }
 
-//Remove() will uninstall the nginx package in linux.
-func Remove() error {
+// Uninstall() will uninstall the nginx package in linux.
+func Uninstall() error {
+	lock.Lock()
+	defer lock.Unlock()
+
 	return executeCommand([]string{"bash", "-c", `
-	apt-get purg nginx
+source /etc/os-release
+linuxID=$ID
+linuxMajorVersion=$( echo $VERSION | awk -F'[.| ]' '{print $1}' )
+linuxCodeName=$VERSION_CODENAME
+[ -f /etc/lsb-release ] &&  \
+	linuxMinorVersion=$(cat /etc/lsb-release  | awk -F'=' '/DISTRIB_RELEASE/ {print $2}' | awk -F'.'  '{print $2}')
+[ -f /etc/system-release ] && \
+	linuxMinorVersion=$(cat /etc/system-release | awk '{print $4}' | awk -F'.' '{print $2}')
+
+case $linuxID in 
+ubuntu|debian)
+	if command -v nginx &> /dev/null; then
+		systemctl disable --now nginx &> /dev/null
+		apt-get purge -y nginx*
+	fi; ;;
+centos|rocky)
+	if command -v nginx &> /dev/null; then
+		systemctl disable --now nginx &> /dev/null
+		yum remove -y nginx*
+	fi; ;;
+esac
 	`}, stdout, stderr)
 }
 
