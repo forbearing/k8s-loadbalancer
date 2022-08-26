@@ -219,9 +219,9 @@ func GetCmdErrMsg(err error, exitCode int, errMsg string) error {
 	}
 	if exitCode != 0 {
 		if len(errMsg) != 0 {
-			return errors.New("exit status " + strconv.Itoa(exitCode) + ": " + errMsg)
+			return errors.New("exit status: " + strconv.Itoa(exitCode) + ": " + errMsg)
 		}
-		return errors.New("exit status " + strconv.Itoa(exitCode))
+		return errors.New("exit status: " + strconv.Itoa(exitCode))
 	}
 	return nil
 }
