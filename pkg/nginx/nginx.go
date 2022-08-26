@@ -35,7 +35,7 @@ func (n *Nginx) setErr(err error) {
 
 // There are four steps will be done by Do function.
 // * call TestConf() to test nginx configuration if nginx already installed.
-func (n *Nginx) Do() bool {
+func (n *Nginx) Do(proto protocol) bool {
 	locker.Lock()
 	defer locker.Unlock()
 	var err error
@@ -57,12 +57,53 @@ func (n *Nginx) Do() bool {
 		n.setErr(err)
 		return false
 	}
+
 	// generate nginx config
 	if err, changed = GenerateNginxConf(); err != nil {
 		n.setErr(err)
 		return false
 	}
-	// if nginx config file changed, test nginx config and reload nginx.
+	// if /etc/nginx/nginx.conf changed, test nginx config and reload nginx.
+	if changed {
+		// test nginx configuration
+		if err = GetCmdErrMsg(TestConf()); err != nil {
+			n.setErr(err)
+			return false
+		}
+		// reload nginx
+		if err = GetCmdErrMsg(Reload()); err != nil {
+			n.setErr(err)
+			return false
+		}
+	}
+
+	// generate nginx virtual host config
+	switch proto {
+	case ProtocolTCP:
+		if err, changed = GenerateTCPConf("", nil, 0); err != nil {
+			n.setErr(err)
+			return false
+		}
+	case ProtocolUDP:
+		if err, changed = GenerateUDPConf(); err != nil {
+			n.setErr(err)
+			return false
+		}
+	case ProtocolHTTP:
+		if err, changed = GenerateHTTPConf(); err != nil {
+			n.setErr(err)
+			return false
+		}
+	case ProtocolHTTPS:
+		if err, changed = GenerateHTTPSConf(); err != nil {
+			n.setErr(err)
+			return false
+		}
+	default:
+		n.setErr(errors.New("protocol must be 'TCP|UDP|HTTP|HTTPS'"))
+		return false
+	}
+	// if nginx virtual host config changed, test nginx config and reload nginx.
 	if changed {
 		// test nginx configuration
 		if err = GetCmdErrMsg(TestConf()); err != nil {
