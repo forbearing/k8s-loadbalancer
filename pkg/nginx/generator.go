@@ -53,7 +53,7 @@ func GenerateNginxConf() (error, bool) {
 
 	// if nginx config file hash code not same, generate the nginx config and overwirte it.
 	if hashCode1 != hashCode2 {
-		logrus.Debug("nginx config hash is not the same, generate it.")
+		logrus.Debugf("%%s hash is not the same, generate it.", nginxConfFile)
 		file, err := os.Create(nginxConfFile)
 		if err != nil {
 			return err, false
@@ -64,7 +64,7 @@ func GenerateNginxConf() (error, bool) {
 		file.Close()
 		return nil, true
 	}
-	logrus.Debug("nginx config file hash is same, skip generate it.")
+	logrus.Debugf("%s hash is same, skip generate it.", nginxConfFile)
 	return nil, false
 }
 
