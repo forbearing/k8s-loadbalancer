@@ -16,7 +16,11 @@ ubuntu|debian)
 	if ! command -v nginx &> /dev/null; then
 		apt-get update
 		apt-get install -y nginx
-	fi; ;;
+	fi
+	if [[ -L /etc/nginx/sites-enabled/default  ]]; then
+		unlink /etc/nginx/sites-enabled/default
+	fi
+	;;
 centos|rocky)
 	if ! command -v nginx &> /dev/null; then
 		yum install -y nginx
@@ -49,6 +53,7 @@ esac
 `
 
 	NGINX_START = `
+if [[ $(systemctl is-active nginx) == "active"  ]]; then exit 0; fi
 echo "systemctl start nginx"
 systemctl start nginx
 `
@@ -65,6 +70,7 @@ echo "systemctl restart nginx"
 systemctl restart nginx
 `
 	NGINX_ENABLE = `
+if [[ $(systemctl is-enabled nginx) == "enabled"  ]]; then exit 0; fi
 echo "systemctl enable nginx"
 systemctl enable nginx
 `
@@ -73,7 +79,7 @@ echo "systemctl enable --now nginx"
 systemctl enable --now nginx
 `
 	NGINX_TESTCONF = `
-echo "test nginx configuration"
+#echo "test nginx configuration"
 nginx -t
 `
 )

@@ -1,6 +1,6 @@
-package template
+package nginx
 
-var NginxConf = `
+var TemplateNginxConf = `
 user www-data;
 worker_processes auto;
 pid /run/nginx.pid;

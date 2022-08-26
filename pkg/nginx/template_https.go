@@ -1,4 +1,4 @@
-package template
+package nginx
 
 /*
 upstream #UPSTREAM_NAME# {

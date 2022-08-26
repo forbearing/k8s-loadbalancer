@@ -27,40 +27,48 @@ func (n *Nginx) Err() error {
 
 // setErr records the first error encountered by the Do() function.
 func (n *Nginx) setErr(err error) {
-	if err == nil {
-		n.err = err
-	}
+	//if err == nil {
+	//logrus.Error(err)
+	n.err = err
+	//}
 }
 
 // There are four steps will be done by Do function.
 // * call TestConf() to test nginx configuration if nginx already installed.
-// *
 func (n *Nginx) Do() bool {
 	locker.Lock()
 	defer locker.Unlock()
+	var err error
+	var changed bool
 
 	// install nginx if nginx not installed
-	if err := GetCmdErrMsg(Install()); err != nil {
+	if err = GetCmdErrMsg(Install()); err != nil {
 		n.setErr(err)
 		return false
 	}
-
-	// test nginx configuration
-	if err := GetCmdErrMsg(TestConf()); err != nil {
-		n.setErr(err)
-		return false
-	}
-
 	// enable nginx
-	if err := GetCmdErrMsg(Enabled()); err != nil {
+	if err = GetCmdErrMsg(Enabled()); err != nil {
 		n.setErr(err)
 		return false
 	}
-
-	// reload nginx
-	if err := GetCmdErrMsg(Reload()); err != nil {
+	// generate nginx config
+	if err, changed = GenerateNginxConf(); err != nil {
+		logrus.Debug(err, changed)
 		n.setErr(err)
 		return false
+	}
+	// if nginx config file changed, test nginx config and reload nginx.
+	if changed {
+		// test nginx configuration
+		if err = GetCmdErrMsg(TestConf()); err != nil {
+			n.setErr(err)
+			return false
+		}
+		// reload nginx
+		if err = GetCmdErrMsg(Reload()); err != nil {
+			n.setErr(err)
+			return false
+		}
 	}
 
 	// everything is done.
@@ -161,5 +169,8 @@ func GetCmdErrMsg(err error, exitCode int, errMsg string) error {
 	if exitCode != 0 {
 		return errors.New("exit status " + strconv.Itoa(exitCode) + ": " + errMsg)
 	}
+	//if len(errMsg) != 0 {
+	//    return errors.New(errMsg)
+	//}
 	return nil
 }
