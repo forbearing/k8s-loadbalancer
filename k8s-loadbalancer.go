@@ -56,7 +56,7 @@ func main() {
 
 	handler := service.NewOrDie(context.Background(), args.GetKubeconfig(), "")
 	stopCh := signals.SetupSignalChannel()
-	ctrl := controller.NewController(handler.Clientset(), handler.ServiceInformer())
+	ctrl := controller.NewController(handler)
 
 	handler.InformerFactory().Start(stopCh)
 	if err := ctrl.Run(args.GetNumWorker(), stopCh); err != nil {
