@@ -2,6 +2,15 @@ package nginx
 
 import "path/filepath"
 
+type protocol string
+
+const (
+	ProtocolTCP protocol = "TCP"
+	ProtocolUDP protocol= "UDP"
+	ProtocolHTTP protocol = "HTTP"
+	ProtocolHTTPS protocol ="HTTPS"
+)
+
 var (
 	nginxDir = "/etc/nginx"
 
