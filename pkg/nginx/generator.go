@@ -65,21 +65,29 @@ func GenerateNginxConf() (error, bool) {
 }
 
 // GenerateTCPConf generate /etc/nginx/sites-enabled/xxx.conf config file for proxy tcp traffic.
-func GenerateTCPConf(upstreamName string, upstreanHost []string, listenPort int) {
+func GenerateTCPConf(upstreamName string, upstreanHost []string, listenPort int) (error, bool) {
 	configFile := upstreamName + ".tcp.conf"
+	_ = configFile
 
 	// if config file not exist, create it.
-	os.Stat(configFile)
+
+	return nil, false
 }
 
 // GenerateUDPConf generate /etc/nginx/sites-enabled/xxx.conf config file for proxy udp traffic.
-func GenerateUDPConf() {}
+func GenerateUDPConf() (error, bool) {
+	return nil, false
+}
 
 // GenerateHTTPConf generate /etc/nginx/sites-enabled/xxx.conf config file for proxy http traffic.
-func GenerateHTTPConf() {}
+func GenerateHTTPConf() (error, bool) {
+	return nil, false
+}
 
 // GenerateHTTPConf generate /etc/nginx/sites-enabled/xxx.conf config file for proxy https traffic.
-func GenerateHTTPSConf() {}
+func GenerateHTTPSConf() (error, bool) {
+	return nil, false
+}
 
 func genHashCode(data []byte) (string, error) {
 	hash := sha256.New()
