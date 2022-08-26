@@ -53,7 +53,6 @@ func (n *Nginx) Do() bool {
 	}
 	// generate nginx config
 	if err, changed = GenerateNginxConf(); err != nil {
-		logrus.Debug(err, changed)
 		n.setErr(err)
 		return false
 	}
