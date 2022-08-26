@@ -10,10 +10,6 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-var (
-	nginxConfFile = "/etc/nginx/nginx.conf"
-)
-
 // GenerateNginxConf generate /etc/nginx/nginx.conf config file.
 // it will return true, if /etc/nginx/nginx.conf changed
 func GenerateNginxConf() (error, bool) {
@@ -69,7 +65,12 @@ func GenerateNginxConf() (error, bool) {
 }
 
 // GenerateTCPConf generate /etc/nginx/sites-enabled/xxx.conf config file for proxy tcp traffic.
-func GenerateTCPConf() {}
+func GenerateTCPConf(upstreamName string, upstreanHost []string, listenPort int) {
+	configFile := upstreamName + ".tcp.conf"
+
+	// if config file not exist, create it.
+	os.Stat(configFile)
+}
 
 // GenerateUDPConf generate /etc/nginx/sites-enabled/xxx.conf config file for proxy udp traffic.
 func GenerateUDPConf() {}
