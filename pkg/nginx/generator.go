@@ -23,6 +23,7 @@ func GenerateNginxConf() (error, bool) {
 			return err, false
 		}
 		file.Close()
+		return nil, true
 	} else if err != nil { // os.Stat error
 		return err, false
 	}

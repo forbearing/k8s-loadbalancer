@@ -101,6 +101,7 @@ func (n *Nginx) Do(proto protocol) bool {
 		}
 	default:
 		n.setErr(errors.New("protocol must be 'TCP|UDP|HTTP|HTTPS'"))
+		changed = false
 		return false
 	}
 	// if nginx virtual host config changed, test nginx config and reload nginx.
