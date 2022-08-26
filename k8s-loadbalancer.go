@@ -44,15 +44,15 @@ func init() {
 func main() {
 	logger.Init()
 
-	//// just for debug
-	//logrus.Info(args.GetPort())
-	//logrus.Info(args.GetBindAddress())
-	//logrus.Info(args.GetKubeconfig())
-	//logrus.Info(args.GetLogLevel())
-	//logrus.Info(args.GetLogFormat())
-	//logrus.Info(args.GetLogFile())
-	//logrus.Info(args.GetUpstream())
-	//logrus.Info(args.GetNumWorker())
+	////// just for debug
+	//logrus.Debug(args.GetPort())
+	//logrus.Debug(args.GetBindAddress())
+	//logrus.Debug(args.GetKubeconfig())
+	//logrus.Debug(args.GetLogLevel())
+	//logrus.Debug(args.GetLogFormat())
+	//logrus.Debug(args.GetLogFile())
+	//logrus.Debug(args.GetUpstream())
+	//logrus.Debug(args.GetNumWorker())
 
 	handler := service.NewOrDie(context.Background(), args.GetKubeconfig(), "")
 	stopCh := signals.SetupSignalChannel()
