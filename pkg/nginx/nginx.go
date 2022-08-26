@@ -41,6 +41,12 @@ func (n *Nginx) Do() bool {
 	var err error
 	var changed bool
 
+	// prepare nginx
+	// it will check whether nginx config dir exist
+	if err = GetCmdErrMsg(Prepare()); err != nil {
+		n.setErr(err)
+		return false
+	}
 	// install nginx if nginx not installed
 	if err = GetCmdErrMsg(Install()); err != nil {
 		n.setErr(err)
@@ -72,6 +78,15 @@ func (n *Nginx) Do() bool {
 
 	// everything is done.
 	return false
+}
+
+// Prepare will do check before processing nginx.
+// You should always call Prepare() before do anything to nginx
+func Prepare() (error, int, string) {
+	return executeCommand([]string{"bash", "-c", NGINX_PREPARE},
+		logrus.New().WriterLevel(logrus.DebugLevel),
+		&bytes.Buffer{},
+	)
 }
 
 // Install will intall the nginx package in linux.
