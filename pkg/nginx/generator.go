@@ -28,7 +28,6 @@ func GenerateNginxConf() (error, bool) {
 		}
 		file.Close()
 	} else if err != nil { // os.Stat error
-		logrus.Error("os.State error")
 		return err, false
 	}
 
