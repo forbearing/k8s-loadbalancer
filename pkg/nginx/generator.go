@@ -38,7 +38,6 @@ func GenerateNginxConf() (error, bool) {
 		hashCode1, hashCode2 string
 	)
 	if data1, err = ioutil.ReadFile(nginxConfFile); err != nil {
-		logrus.Error("ioutil.ReadFile error", err)
 		return err, false
 	}
 	data2 = []byte(TemplateNginxConf)
