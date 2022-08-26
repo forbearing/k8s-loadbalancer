@@ -48,11 +48,32 @@ centos|rocky)
 esac
 `
 
-	NGINX_START      = "systemctl start nginx"
-	NGINX_STOP       = "systemctl stop nginx"
-	NGINX_RESTART    = "systemctl restart nginx"
-	NGINX_RELOAD     = "systemctl reload nginx"
-	NGINX_ENABLED    = "systemctl enabled nginx"
-	NGINX_ENABLEDNOW = "systemctl enabled --now nginx"
-	NGINX_TESTCONF   = "nginx -t"
+	NGINX_START = `
+echo "systemctl start nginx"
+systemctl start nginx
+`
+	NGINX_STOP = `
+echo "systemctl stop nginx"
+systemctl stop nginx
+`
+	NGINX_RELOAD = `
+echo "systemctl reload nginx"
+systemctl reload nginx
+`
+	NGINX_RESTART = `
+echo "systemctl restart nginx"
+systemctl restart nginx
+`
+	NGINX_ENABLE = `
+echo "systemctl enable nginx"
+systemctl enable nginx
+`
+	NGINX_ENABLENOW = `
+echo "systemctl enable --now nginx"
+systemctl enable --now nginx
+`
+	NGINX_TESTCONF = `
+echo "test nginx configuration"
+nginx -t
+`
 )

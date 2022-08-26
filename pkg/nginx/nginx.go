@@ -8,107 +8,133 @@ import (
 	"strconv"
 	"sync"
 
+	"github.com/forbearing/k8s-loadbalancer/pkg/logger"
 	"github.com/sirupsen/logrus"
 )
 
 var (
 	locker sync.RWMutex
-
-	stdout = logrus.New().WriterLevel(logrus.DebugLevel)
 )
 
 type Nginx struct {
 	err error
 }
 
-// Err returns the first errors that was encountered by the Do() method.
+// Err returns the first errors that was encountered by the Do() function.
 func (n *Nginx) Err() error {
 	return n.err
 }
 
-// setErr records the first error encountered by the Do() method.
+// setErr records the first error encountered by the Do() function.
 func (n *Nginx) setErr(err error) {
-	if n.err == nil {
+	if err == nil {
 		n.err = err
 	}
 }
 
-// Install will intall the nginx package in linux.
-func Install() (error, int, string) {
+// There are four steps will be done by Do function.
+// * call TestConf() to test nginx configuration if nginx already installed.
+// *
+func (n *Nginx) Do() bool {
 	locker.Lock()
 	defer locker.Unlock()
+
+	// install nginx if nginx not installed
+	if err := GetCmdErrMsg(Install()); err != nil {
+		n.setErr(err)
+		return false
+	}
+
+	// test nginx configuration
+	if err := GetCmdErrMsg(TestConf()); err != nil {
+		n.setErr(err)
+		return false
+	}
+
+	// enable nginx
+	if err := GetCmdErrMsg(Enabled()); err != nil {
+		n.setErr(err)
+		return false
+	}
+
+	// reload nginx
+	if err := GetCmdErrMsg(Reload()); err != nil {
+		n.setErr(err)
+		return false
+	}
+
+	// everything is done.
+	return false
+}
+
+// Install will intall the nginx package in linux.
+func Install() (error, int, string) {
+	stdout := logger.New().WriterLevel(logrus.DebugLevel)
 	errBuf := &bytes.Buffer{}
 	return executeCommand([]string{"bash", "-c", NGINX_INSTALL}, stdout, errBuf)
 }
 
 // Remove() will uninstall the nginx package in linux.
 func Remove() (error, int, string) {
-	locker.Lock()
-	defer locker.Unlock()
+	stdout := logger.New().WriterLevel(logrus.DebugLevel)
 	errBuf := &bytes.Buffer{}
 	return executeCommand([]string{"bash", "-c", NGINX_REMOVE}, stdout, errBuf)
 }
 
 // Start will start nginx daemon by systemctl.
 func Start() (error, int, string) {
-	locker.Lock()
-	defer locker.Unlock()
+	stdout := logger.New().WriterLevel(logrus.DebugLevel)
 	errBuf := &bytes.Buffer{}
 	return executeCommand([]string{"bash", "-c", NGINX_START}, stdout, errBuf)
 }
 
 // Stop will stop nginx daemon by systemctl.
 func Stop() (error, int, string) {
-	locker.Lock()
-	defer locker.Unlock()
+	stdout := logger.New().WriterLevel(logrus.DebugLevel)
 	errBuf := &bytes.Buffer{}
 	return executeCommand([]string{"bash", "-c", NGINX_STOP}, stdout, errBuf)
 }
 
-// Restart will restart nginx daemon by systemctl.
-func Restart() (error, int, string) {
-	locker.Lock()
-	defer locker.Unlock()
-	errBuf := &bytes.Buffer{}
-	return executeCommand([]string{"bash", "-c", NGINX_RESTART}, stdout, errBuf)
-}
-
 // Reload will reload nginx daemon by systemctl.
 func Reload() (error, int, string) {
-	locker.Lock()
-	defer locker.Unlock()
+	stdout := logger.New().WriterLevel(logrus.DebugLevel)
 	errBuf := &bytes.Buffer{}
 	return executeCommand([]string{"bash", "-c", NGINX_RELOAD}, stdout, errBuf)
 }
 
+// Restart will restart nginx daemon by systemctl.
+func Restart() (error, int, string) {
+	stdout := logger.New().WriterLevel(logrus.DebugLevel)
+	errBuf := &bytes.Buffer{}
+	return executeCommand([]string{"bash", "-c", NGINX_RESTART}, stdout, errBuf)
+}
+
 // EnabledNow will enabled and start nginx daemon by systemctl.
 func EnabledNow() (error, int, string) {
-	locker.Lock()
-	defer locker.Unlock()
+	stdout := logger.New().WriterLevel(logrus.DebugLevel)
 	errBuf := &bytes.Buffer{}
-	return executeCommand([]string{"bash", "-c", NGINX_ENABLEDNOW}, stdout, errBuf)
+	return executeCommand([]string{"bash", "-c", NGINX_ENABLENOW}, stdout, errBuf)
 }
 
 // Enabled will enabled nginx daemon by systemctl.
 func Enabled() (error, int, string) {
-	locker.Lock()
-	defer locker.Unlock()
+	stdout := logger.New().WriterLevel(logrus.DebugLevel)
 	errBuf := &bytes.Buffer{}
-	return executeCommand([]string{"bash", "-c", NGINX_ENABLED}, stdout, errBuf)
+	return executeCommand([]string{"bash", "-c", NGINX_ENABLE}, stdout, errBuf)
 }
 
 // TestConf will test nginx configuration file.
 func TestConf() (error, int, string) {
-	locker.Lock()
-	defer locker.Unlock()
+	stdout := logger.New().WriterLevel(logrus.DebugLevel)
 	errBuf := &bytes.Buffer{}
 	return executeCommand([]string{"bash", "-c", NGINX_TESTCONF}, stdout, errBuf)
 }
+
+// Version get nginx version
 func Version() (error, int, string) {
-	locker.Lock()
-	defer locker.Unlock()
+	stdout := logger.New().WriterLevel(logrus.DebugLevel)
 	errBuf := &bytes.Buffer{}
-	return executeCommand([]string{"bash", "-c", "nginx version"}, stdout, errBuf)
+	return executeCommand([]string{"whoami"}, stdout, errBuf)
 }
 
 // executeCommand execute linux command.
@@ -127,8 +153,8 @@ func executeCommand(command []string, stdout io.Writer, errBuf *bytes.Buffer) (e
 	return nil, 0, errBuf.String()
 }
 
-// CmdErrMsg returns the exec.Command error and command stderr output.
-func CmdErrMsg(err error, exitCode int, errMsg string) error {
+// GetCmdErrMsg returns the exec.Command error and command stderr output.
+func GetCmdErrMsg(err error, exitCode int, errMsg string) error {
 	if err != nil {
 		return errors.New(err.Error() + ": " + errMsg)
 	}
