@@ -1,5 +1,7 @@
 package nginx
 
+import "fmt"
+
 var (
 	NGINX_INSTALL = `
 source /etc/os-release
@@ -82,4 +84,13 @@ systemctl enable --now nginx
 #echo "test nginx configuration"
 nginx -t
 `
+
+	NGINX_PREPARE = fmt.Sprintf(`
+for dir in "%s" "%s" "%s" "%s"; do
+	if [[ ! -d "$dir" ]]; then
+		rm -rf "$dir"
+		mkdir -p "$dir"
+	fi
+done
+`, tcpConfDir, udpConfDir, httpConfDir, httpsConfDir)
 )
