@@ -84,79 +84,71 @@ func (n *Nginx) Do() bool {
 // You should always call Prepare() before do anything to nginx
 func Prepare() (error, int, string) {
 	return executeCommand([]string{"bash", "-c", NGINX_PREPARE},
-		logrus.New().WriterLevel(logrus.DebugLevel),
-		&bytes.Buffer{},
-	)
+		logger.New().WriterLevel(logrus.DebugLevel),
+		&bytes.Buffer{})
 }
 
 // Install will intall the nginx package in linux.
 func Install() (error, int, string) {
-	stdout := logger.New().WriterLevel(logrus.DebugLevel)
-	errBuf := &bytes.Buffer{}
-	return executeCommand([]string{"bash", "-c", NGINX_INSTALL}, stdout, errBuf)
+	return executeCommand([]string{"bash", "-c", NGINX_INSTALL},
+		logger.New().WriterLevel(logrus.DebugLevel),
+		&bytes.Buffer{})
 }
 
 // Remove() will uninstall the nginx package in linux.
 func Remove() (error, int, string) {
-	stdout := logger.New().WriterLevel(logrus.DebugLevel)
-	errBuf := &bytes.Buffer{}
-	return executeCommand([]string{"bash", "-c", NGINX_REMOVE}, stdout, errBuf)
+	return executeCommand([]string{"bash", "-c", NGINX_REMOVE},
+		logger.New().WriterLevel(logrus.DebugLevel),
+		&bytes.Buffer{})
 }
 
 // Start will start nginx daemon by systemctl.
 func Start() (error, int, string) {
-	stdout := logger.New().WriterLevel(logrus.DebugLevel)
-	errBuf := &bytes.Buffer{}
-	return executeCommand([]string{"bash", "-c", NGINX_START}, stdout, errBuf)
+	return executeCommand([]string{"bash", "-c", NGINX_START},
+		logger.New().WriterLevel(logrus.DebugLevel),
+		&bytes.Buffer{})
 }
 
 // Stop will stop nginx daemon by systemctl.
 func Stop() (error, int, string) {
-	stdout := logger.New().WriterLevel(logrus.DebugLevel)
-	errBuf := &bytes.Buffer{}
-	return executeCommand([]string{"bash", "-c", NGINX_STOP}, stdout, errBuf)
+	return executeCommand([]string{"bash", "-c", NGINX_STOP},
+		logger.New().WriterLevel(logrus.DebugLevel),
+		&bytes.Buffer{})
 }
 
 // Reload will reload nginx daemon by systemctl.
 func Reload() (error, int, string) {
-	stdout := logger.New().WriterLevel(logrus.DebugLevel)
-	errBuf := &bytes.Buffer{}
-	return executeCommand([]string{"bash", "-c", NGINX_RELOAD}, stdout, errBuf)
+	return executeCommand([]string{"bash", "-c", NGINX_RELOAD},
+		logger.New().WriterLevel(logrus.DebugLevel),
+		&bytes.Buffer{})
 }
 
 // Restart will restart nginx daemon by systemctl.
 func Restart() (error, int, string) {
-	stdout := logger.New().WriterLevel(logrus.DebugLevel)
-	errBuf := &bytes.Buffer{}
-	return executeCommand([]string{"bash", "-c", NGINX_RESTART}, stdout, errBuf)
+	return executeCommand([]string{"bash", "-c", NGINX_RESTART},
+		logger.New().WriterLevel(logrus.DebugLevel),
+		&bytes.Buffer{})
 }
 
 // EnabledNow will enabled and start nginx daemon by systemctl.
 func EnabledNow() (error, int, string) {
-	stdout := logger.New().WriterLevel(logrus.DebugLevel)
-	errBuf := &bytes.Buffer{}
-	return executeCommand([]string{"bash", "-c", NGINX_ENABLENOW}, stdout, errBuf)
+	return executeCommand([]string{"bash", "-c", NGINX_ENABLENOW},
+		logger.New().WriterLevel(logrus.DebugLevel),
+		&bytes.Buffer{})
 }
 
 // Enabled will enabled nginx daemon by systemctl.
 func Enabled() (error, int, string) {
-	stdout := logger.New().WriterLevel(logrus.DebugLevel)
-	errBuf := &bytes.Buffer{}
-	return executeCommand([]string{"bash", "-c", NGINX_ENABLE}, stdout, errBuf)
+	return executeCommand([]string{"bash", "-c", NGINX_ENABLE},
+		logger.New().WriterLevel(logrus.DebugLevel),
+		&bytes.Buffer{})
 }
 
 // TestConf will test nginx configuration file.
 func TestConf() (error, int, string) {
-	stdout := logger.New().WriterLevel(logrus.DebugLevel)
-	errBuf := &bytes.Buffer{}
-	return executeCommand([]string{"bash", "-c", NGINX_TESTCONF}, stdout, errBuf)
-}
-
-// Version get nginx version
-func Version() (error, int, string) {
-	stdout := logger.New().WriterLevel(logrus.DebugLevel)
-	errBuf := &bytes.Buffer{}
-	return executeCommand([]string{"whoami"}, stdout, errBuf)
+	return executeCommand([]string{"bash", "-c", NGINX_TESTCONF},
+		logger.New().WriterLevel(logrus.DebugLevel),
+		&bytes.Buffer{})
 }
 
 // executeCommand execute linux command.
