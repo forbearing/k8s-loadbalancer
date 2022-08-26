@@ -24,6 +24,8 @@ var (
 	argLogFile    = pflag.String("log-output", "/dev/stdout", "specify log file, default output log to /dev/stdout")
 	argUpstream   = pflag.StringSlice("upstream", []string{}, "multiple upstream hosts or IP to which the loadbalancer will proxy traffic, separated by common, eg: --upstream host1,host2,host3 or --upstream 1.1.1.1,2.2.2.2,3.3.3.3 ")
 	argNumWorker  = pflag.Int("worker", runtime.NumCPU(), "the number of worker goroutines to handle k8s service resources and nginx daemon, default to the number of cpu")
+	//argEnableFirewall = pflag.Bool("enable-firewall", false, "whether enable ufw for debian/ubuntu and firewalld for rocky/centos, default to false")
+	//argConfPath = pflag.String("conf", "", "the configuration file path")
 )
 
 func init() {
