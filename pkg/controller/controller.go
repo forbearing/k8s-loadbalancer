@@ -125,7 +125,7 @@ func (c *Controller) enqueueService(obj interface{}) {
 // processNginx
 func (c *Controller) processNginx(key string) error {
 	n := &nginx.Nginx{}
-	for n.Do() {
+	for n.Do("TCP") {
 	}
 
 	return n.Err()
