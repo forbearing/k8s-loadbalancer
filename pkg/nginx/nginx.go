@@ -212,13 +212,16 @@ func executeCommand(command []string, stdout io.Writer, errBuf *bytes.Buffer) (e
 // GetCmdErrMsg returns the exec.Command error and command stderr output.
 func GetCmdErrMsg(err error, exitCode int, errMsg string) error {
 	if err != nil {
-		return errors.New(err.Error() + ": " + errMsg)
+		if len(errMsg) != 0 {
+			return errors.New(err.Error() + ": " + errMsg)
+		}
+		return errors.New(err.Error())
 	}
 	if exitCode != 0 {
-		return errors.New("exit status " + strconv.Itoa(exitCode) + ": " + errMsg)
+		if len(errMsg) != 0 {
+			return errors.New("exit status " + strconv.Itoa(exitCode) + ": " + errMsg)
+		}
+		return errors.New("exit status " + strconv.Itoa(exitCode))
 	}
-	//if len(errMsg) != 0 {
-	//    return errors.New(errMsg)
-	//}
 	return nil
 }
