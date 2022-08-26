@@ -5,11 +5,11 @@ import (
 	"time"
 
 	"github.com/forbearing/k8s-loadbalancer/pkg/nginx"
+	"github.com/forbearing/k8s/service"
 	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
-	coreinformers "k8s.io/client-go/informers/core/v1"
 	"k8s.io/client-go/kubernetes"
 	corelisters "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
@@ -25,16 +25,16 @@ type Controller struct {
 	recorder      record.EventRecorder
 }
 
-func NewController(clientset kubernetes.Interface, serviceInformer coreinformers.ServiceInformer) *Controller {
+func NewController(handler *service.Handler) *Controller {
 	controller := &Controller{
-		clientset:     clientset,
-		serviceLister: serviceInformer.Lister(),
-		serviceSynced: serviceInformer.Informer().HasSynced,
+		clientset:     handler.Clientset(),
+		serviceLister: handler.Lister(),
+		serviceSynced: handler.Informer().HasSynced,
 		workqueue:     workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "loadbalancer"),
 	}
 
 	logrus.Info("Setting up event handlers")
-	serviceInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+	handler.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: controller.enqueueService,
 		UpdateFunc: func(old, new interface{}) {
 			newSvc := new.(*corev1.Service)
@@ -95,7 +95,7 @@ func (c *Controller) processNextWorkItem() bool {
 			c.workqueue.Forget(obj)
 			utilruntime.HandleError(fmt.Errorf("expected string in workqueue but got %#v", obj))
 		}
-		if err := c.handleNginx(key); err != nil {
+		if err := c.processNginx(key); err != nil {
 			c.workqueue.AddRateLimited(key)
 			return fmt.Errorf("error syncing '%s': %s, requeuing", key, err.Error())
 		}
@@ -112,13 +112,6 @@ func (c *Controller) processNextWorkItem() bool {
 	return true
 }
 
-// handleNginx
-func (c *Controller) handleNginx(key string) error {
-	//logrus.Infof("%s", key)
-	//return nginx.Install()
-	return nginx.Uninstall()
-}
-
 // enqueueService
 func (c *Controller) enqueueService(obj interface{}) {
 	key, err := cache.MetaNamespaceKeyFunc(obj)
@@ -127,4 +120,13 @@ func (c *Controller) enqueueService(obj interface{}) {
 		return
 	}
 	c.workqueue.Add(key)
+}
+
+// processNginx
+func (c *Controller) processNginx(key string) error {
+	n := &nginx.Nginx{}
+	for n.Do() {
+	}
+
+	return n.Err()
 }
