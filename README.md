@@ -2,4 +2,4 @@
 
 
 
-`go run k8s-loadbalancer.go  `
+`go run k8s-loadbalancer.go --log-level=debug`
