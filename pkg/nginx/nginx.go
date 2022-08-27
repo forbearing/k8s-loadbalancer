@@ -216,7 +216,8 @@ func executeCommand(command []string, stdout io.Writer, errBuf *bytes.Buffer) (e
 	return nil, 0, errBuf.String()
 }
 
-// GetCmdErrMsg returns the exec.Command error and command stderr output.
+// GetCmdErrMsg will return the constructed error message from the error returned by
+// exec.Command and command line stderr output.
 func GetCmdErrMsg(err error, exitCode int, errMsg string) error {
 	if err != nil {
 		if len(errMsg) != 0 {
