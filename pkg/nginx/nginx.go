@@ -8,8 +8,10 @@ import (
 	"strconv"
 	"sync"
 
+	"github.com/forbearing/k8s-loadbalancer/pkg/args"
 	"github.com/forbearing/k8s-loadbalancer/pkg/logger"
 	"github.com/sirupsen/logrus"
+	corev1 "k8s.io/api/core/v1"
 )
 
 var (
@@ -35,7 +37,7 @@ func (n *Nginx) setErr(err error) {
 
 // There are four steps will be done by Do function.
 // * call TestConf() to test nginx configuration if nginx already installed.
-func (n *Nginx) Do(proto protocol) bool {
+func (n *Nginx) Do(action Action, proto Protocol, namespace, name string, ports []corev1.ServicePort) bool {
 	locker.Lock()
 	defer locker.Unlock()
 	var err error
@@ -78,13 +80,18 @@ func (n *Nginx) Do(proto protocol) bool {
 	}
 
 	// generate nginx virtual host config
+	logrus.Debug("start generate virtual host config file")
 	switch proto {
 	case ProtocolTCP:
-		if err, changed = GenerateTCPConf("", nil, 0); err != nil {
-			n.setErr(err)
-			return false
+		for _, port := range ports {
+			logrus.Debug("start generate tcp config")
+			if err, changed = GenerateTCPConf(action, namespace, name, port, args.GetUpstream()); err != nil {
+				n.setErr(err)
+				return false
+			}
 		}
 	case ProtocolUDP:
+		logrus.Debug("start generate udp config")
 		if err, changed = GenerateUDPConf(); err != nil {
 			n.setErr(err)
 			return false

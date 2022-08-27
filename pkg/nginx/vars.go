@@ -2,15 +2,6 @@ package nginx
 
 import "path/filepath"
 
-type protocol string
-
-const (
-	ProtocolTCP protocol = "TCP"
-	ProtocolUDP protocol= "UDP"
-	ProtocolHTTP protocol = "HTTP"
-	ProtocolHTTPS protocol ="HTTPS"
-)
-
 var (
 	nginxDir = "/etc/nginx"
 
@@ -20,4 +11,20 @@ var (
 	httpsConfDir = filepath.Join(nginxDir, "sites-enabled")
 
 	nginxConfFile = filepath.Join(nginxDir, "nginx.conf")
+)
+
+type Protocol string
+
+const (
+	ProtocolTCP   Protocol = "TCP"
+	ProtocolUDP   Protocol = "UDP"
+	ProtocolHTTP  Protocol = "HTTP"
+	ProtocolHTTPS Protocol = "HTTPS"
+)
+
+type Action string
+
+const (
+	ActionAdd = "ADD"
+	ActionDel = "DEL"
 )

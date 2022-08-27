@@ -4,10 +4,14 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/sirupsen/logrus"
+	corev1 "k8s.io/api/core/v1"
 )
 
 // GenerateNginxConf generate /etc/nginx/nginx.conf config file.
@@ -19,7 +23,7 @@ func GenerateNginxConf() (error, bool) {
 		if err != nil {
 			return err, false
 		}
-		if _, err := file.Write([]byte(TemplateNginxConf)); err != nil {
+		if _, err := file.WriteString(TemplateNginxConf); err != nil {
 			return err, false
 		}
 		file.Close()
@@ -30,32 +34,31 @@ func GenerateNginxConf() (error, bool) {
 
 	// calculate the nginx config file hash.
 	var (
-		err                  error
-		data1, data2         []byte
-		hashCode1, hashCode2 string
+		err                      error
+		oldData, newData         []byte
+		oldHashCode, newHashCode string
 	)
-	if data1, err = ioutil.ReadFile(nginxConfFile); err != nil {
+	if oldData, err = ioutil.ReadFile(nginxConfFile); err != nil {
 		return err, false
 	}
-	data2 = []byte(TemplateNginxConf)
-	if hashCode1, err = genHashCode(data1); err != nil {
+	newData = []byte(TemplateNginxConf)
+	if oldHashCode, err = genHashCode(oldData); err != nil {
 		return err, false
 	}
-	if hashCode2, err = genHashCode(data2); err != nil {
+	if newHashCode, err = genHashCode(newData); err != nil {
 		return err, false
 	}
-
-	logrus.Debugf("%s hash before: %s", nginxConfFile, hashCode1)
-	logrus.Debugf("%s hash after:  %s", nginxConfFile, hashCode2)
+	logrus.Debugf("%s hash before: %s", nginxConfFile, oldHashCode)
+	logrus.Debugf("%s hash after:  %s", nginxConfFile, newHashCode)
 
 	// if nginx config file hash code not same, generate the nginx config and overwirte it.
-	if hashCode1 != hashCode2 {
-		logrus.Debugf("%%s hash is not the same, generate it.", nginxConfFile)
+	if oldHashCode != newHashCode {
+		logrus.Debugf("%s hash is not the same, generate it.", nginxConfFile)
 		file, err := os.Create(nginxConfFile)
 		if err != nil {
 			return err, false
 		}
-		if _, err := file.Write(data2); err != nil {
+		if _, err := file.Write(newData); err != nil {
 			return err, false
 		}
 		file.Close()
@@ -66,12 +69,78 @@ func GenerateNginxConf() (error, bool) {
 }
 
 // GenerateTCPConf generate /etc/nginx/sites-enabled/xxx.conf config file for proxy tcp traffic.
-func GenerateTCPConf(upstreamName string, upstreanHost []string, listenPort int) (error, bool) {
-	configFile := upstreamName + ".tcp.conf"
-	_ = configFile
+func GenerateTCPConf(action Action, namespace, name string, port corev1.ServicePort, upstreamHost []string) (error, bool) {
+	logrus.Debugf("GenerateTCPConf, action is: %s", action)
+	upstreamName := fmt.Sprintf("%s.%s.%s", namespace, name, port.Name)
+	var hostRecord strings.Builder
+	logrus.Debugf("upstream host are: %v", upstreamHost)
+	for _, host := range upstreamHost {
+		hostRecord.WriteString(fmt.Sprintf("    server %s:%d;\n", host, port.NodePort))
+	}
+	configData := fmt.Sprintf(TemplateTCP, upstreamName, hostRecord.String(), port.Port, upstreamName, upstreamName)
+	configFile := filepath.Join(tcpConfDir, "tcp."+upstreamName)
 
+	// if action is ActionDel, it means that k8s service object was deleted,
+	// and we should delete the corresponding nginx configuration file.
+	if action == ActionDel {
+		logrus.Debugf("delete nginx config: %s", configFile)
+		os.Remove(configFile)
+		return nil, true
+	}
+
+	// if action is ActionAdd, it means that k8s service object exists.
+	// we should create the corresponding nginx configuration file.
+	//
 	// if config file not exist, create it.
+	if _, err := os.Stat(configFile); errors.Is(err, os.ErrNotExist) {
+		logrus.Debugf("create nginx config: %s", configFile)
+		file, err := os.Create(configFile)
+		if err != nil {
+			return err, false
+		}
+		if _, err := file.WriteString(configData); err != nil {
+			return err, false
+		}
+		file.Close()
+		return nil, true
+	} else if err != nil { // os.Stat() error
+		return err, false
+	}
 
+	logrus.Debugf("nginx config file: %s already exist, skip generate", configFile)
+	// calculate the nginx config file hash
+	var (
+		err                      error
+		oldData, newData         []byte
+		oldHashCode, newHashCode string
+	)
+	if oldData, err = ioutil.ReadFile(configFile); err != nil {
+		return err, false
+	}
+	newData = []byte(configData)
+	if oldHashCode, err = genHashCode(oldData); err != nil {
+		return err, false
+	}
+	if newHashCode, err = genHashCode(newData); err != nil {
+		return err, false
+	}
+	logrus.Debugf("%s hash before: %s", configFile, oldHashCode)
+	logrus.Debugf("%s hash after:  %s", configFile, newHashCode)
+
+	// if config file hash not the same, generate the nginx config and overwirte it.
+	if oldHashCode != newHashCode {
+		logrus.Debugf("%s hash is not the same, generate it.", configFile)
+		file, err := os.Create(configFile)
+		if err != nil {
+			return err, false
+		}
+		if _, err := file.Write(newData); err != nil {
+			return err, false
+		}
+		file.Close()
+		return nil, true
+	}
+	logrus.Debugf("%s hash is same, skip generate it.", configFile)
 	return nil, false
 }
 
