@@ -5,6 +5,14 @@ type updateObj struct {
 	newObj interface{}
 }
 
+type EventType string
+
+const (
+	EventTypeAdd    = "Add"
+	EventTypeUpdate = "Update"
+	EventTypeDelete = "Delete"
+)
+
 var (
 	queueSize = 100
 
