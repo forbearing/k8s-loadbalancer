@@ -6,35 +6,41 @@ import (
 
 	"github.com/forbearing/k8s-loadbalancer/pkg/nginx"
 	"github.com/forbearing/k8s/service"
+	"github.com/forbearing/k8s/util/annotations"
 	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
-	"k8s.io/client-go/kubernetes"
 	corelisters "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/workqueue"
 )
 
+const (
+	LoadBalancerAnnotation = "k8s-loadbalancer=true"
+)
+
 type Controller struct {
-	clientset     kubernetes.Interface
-	serviceLister corelisters.ServiceLister
-	serviceSynced cache.InformerSynced
-	workqueue     workqueue.RateLimitingInterface
-	recorder      record.EventRecorder
+	serviceHandler *service.Handler
+	serviceLister  corelisters.ServiceLister
+	serviceSynced  cache.InformerSynced
+	workqueue      workqueue.RateLimitingInterface
+	recorder       record.EventRecorder
 }
 
-func NewController(handler *service.Handler) *Controller {
+func NewController(serviceHandler *service.Handler) *Controller {
 	controller := &Controller{
-		clientset:     handler.Clientset(),
-		serviceLister: handler.Lister(),
-		serviceSynced: handler.Informer().HasSynced,
-		workqueue:     workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "loadbalancer"),
+		serviceHandler: serviceHandler,
+		serviceLister:  serviceHandler.Lister(),
+		serviceSynced:  serviceHandler.Informer().HasSynced,
+		workqueue:      workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "loadbalancer"),
 	}
 
 	logrus.Info("Setting up event handlers")
-	handler.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+	serviceHandler.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: controller.enqueueService,
 		UpdateFunc: func(old, new interface{}) {
 			newSvc := new.(*corev1.Service)
@@ -112,21 +118,58 @@ func (c *Controller) processNextWorkItem() bool {
 	return true
 }
 
+// processNginx
+func (c *Controller) processNginx(key string) error {
+	// convert the namespace/name string into a distinct namespace and name
+	namespace, name, err := cache.SplitMetaNamespaceKey(key)
+	if err != nil {
+		utilruntime.HandleError(fmt.Errorf("invalid resource key: %s", key))
+		return nil
+	}
+
+	n := &nginx.Nginx{}
+	var svcObj = &corev1.Service{}
+	// if k8s service object exist, add nginx config.
+	if svcObj, err = c.serviceHandler.WithNamespace(namespace).Get(name); err == nil {
+		n.Do(nginx.ActionAdd, nginx.ProtocolTCP, namespace, name, svcObj.Spec.Ports)
+		return n.Err()
+	}
+	// if k8s service object not exist, delete nginx config.
+	if k8serrors.IsNotFound(err) {
+		for n.Do(nginx.ActionDel, nginx.ProtocolTCP, namespace, name, svcObj.Spec.Ports) {
+		}
+		return n.Err()
+	}
+
+	utilruntime.HandleError(fmt.Errorf("service handler get service error: %s", err.Error()))
+	return err
+}
+
 // enqueueService
 func (c *Controller) enqueueService(obj interface{}) {
-	key, err := cache.MetaNamespaceKeyFunc(obj)
+	namespacedName, err := cache.MetaNamespaceKeyFunc(obj)
 	if err != nil {
 		utilruntime.HandleError(err)
 		return
 	}
-	c.workqueue.Add(key)
-}
 
-// processNginx
-func (c *Controller) processNginx(key string) error {
-	n := &nginx.Nginx{}
-	for n.Do("TCP") {
+	serviceType, err := c.serviceHandler.GetType(obj)
+	if err != nil {
+		logrus.Errorf("service handler get service type error: %s", err.Error())
+		return
 	}
 
-	return n.Err()
+	// if k8s service type is not LoadBalancer, skip it.
+	if serviceType != string(corev1.ServiceTypeLoadBalancer) {
+		logrus.Debugf(`service "%s" type is not LoadBalancer(is "%s"), skip enqueue`, namespacedName, serviceType)
+		return
+	}
+	// if the k8s object not contains the annotation, skip it.
+	if !annotations.Has(obj.(runtime.Object), LoadBalancerAnnotation) {
+		logrus.Debugf(`service "%s" don't have annotation: "%s", skip enqueue`, namespacedName, LoadBalancerAnnotation)
+		return
+	}
+
+	logrus.Debugf("enqueue service: '%s'", namespacedName)
+	c.workqueue.Add(namespacedName)
 }
