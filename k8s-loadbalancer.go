@@ -13,6 +13,7 @@ import (
 	"github.com/forbearing/k8s/util/signals"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/pflag"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 var (
@@ -56,7 +57,7 @@ func main() {
 	//logrus.Debug(args.GetUpstream())
 	//logrus.Debug(args.GetNumWorker())
 
-	handler := service.NewOrDie(context.Background(), args.GetKubeconfig(), "")
+	handler := service.NewOrDie(context.Background(), args.GetKubeconfig(), metav1.NamespaceAll)
 	stopCh := signals.SetupSignalChannel()
 	ctrl := controller.NewController(handler)
 
