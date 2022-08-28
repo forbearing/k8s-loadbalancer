@@ -29,14 +29,15 @@ const (
 	ActionTypeDelete = "DELETE"
 )
 
-type ServiceInfo struct {
+type Service struct {
 	Action    ActionType
 	Namespace string
 	Name      string
-	PortsInfo []PortInfo
+	Ports     []Port
 }
 
-type PortInfo struct {
+type Port struct {
 	Protocol string
 	Name     string
+	NodePort int32
 }

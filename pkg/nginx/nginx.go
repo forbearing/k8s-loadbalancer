@@ -8,10 +8,8 @@ import (
 	"strconv"
 	"sync"
 
-	"github.com/forbearing/k8s-loadbalancer/pkg/args"
 	"github.com/forbearing/k8s-loadbalancer/pkg/logger"
 	"github.com/sirupsen/logrus"
-	corev1 "k8s.io/api/core/v1"
 )
 
 var (
@@ -37,7 +35,7 @@ func (n *Nginx) setErr(err error) {
 
 // There are four steps will be done by Do function.
 // * call TestConf() to test nginx configuration if nginx already installed.
-func (n *Nginx) Do(action Action, proto Protocol, namespace, name string, ports []corev1.ServicePort) bool {
+func (n *Nginx) Do(service *Service) bool {
 	locker.Lock()
 	defer locker.Unlock()
 	var err error
@@ -81,34 +79,10 @@ func (n *Nginx) Do(action Action, proto Protocol, namespace, name string, ports 
 
 	// generate nginx virtual host config
 	logrus.Debug("start generate virtual host config file")
-	switch proto {
-	case ProtocolTCP:
-		for _, port := range ports {
-			logrus.Debug("start generate tcp config")
-			if err, changed = GenerateTCPConf(action, namespace, name, port, args.GetUpstream()); err != nil {
-				n.setErr(err)
-				return false
-			}
-		}
-	case ProtocolUDP:
-		logrus.Debug("start generate udp config")
-		if err, changed = GenerateUDPConf(); err != nil {
-			n.setErr(err)
-			return false
-		}
-	case ProtocolHTTP:
-		if err, changed = GenerateHTTPConf(); err != nil {
-			n.setErr(err)
-			return false
-		}
-	case ProtocolHTTPS:
-		if err, changed = GenerateHTTPSConf(); err != nil {
-			n.setErr(err)
-			return false
-		}
-	default:
-		n.setErr(errors.New("protocol must be 'TCP|UDP|HTTP|HTTPS'"))
-		changed = false
+	logrus.Debug("start generate tcp config")
+
+	if err, changed = GenerateVirtualHostConf(service); err != nil {
+		n.setErr(err)
 		return false
 	}
 	// if nginx virtual host config changed, test nginx config and reload nginx.

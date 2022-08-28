@@ -10,8 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/forbearing/k8s-loadbalancer/pkg/args"
 	"github.com/sirupsen/logrus"
-	corev1 "k8s.io/api/core/v1"
 )
 
 // GenerateNginxConf generate /etc/nginx/nginx.conf config file.
@@ -69,24 +69,19 @@ func GenerateNginxConf() (error, bool) {
 }
 
 // GenerateTCPConf generate /etc/nginx/sites-enabled/xxx.conf config file for proxy tcp traffic.
-func GenerateTCPConf(action Action, namespace, name string, port corev1.ServicePort, upstreamHost []string) (error, bool) {
-	logrus.Debugf("GenerateTCPConf, action is: %s", action)
-	upstreamName := fmt.Sprintf("%s.%s.%s", namespace, name, port.Name)
+func GenerateVirtualHostConf(service *Service) (error, bool) {
+	upstreamName := fmt.Sprintf("%s.%s.%s", service.Namespace, service.Name, service.Ports[0].Name)
+
 	var hostRecord strings.Builder
-	logrus.Debugf("upstream host are: %v", upstreamHost)
-	for _, host := range upstreamHost {
-		hostRecord.WriteString(fmt.Sprintf("    server %s:%d;\n", host, port.NodePort))
+	logrus.Debugf("upstream host are: %v", args.GetUpstream())
+	for _, host := range args.GetUpstream() {
+		hostRecord.WriteString(fmt.Sprintf("    server %s:%d;\n", host, service.Ports[0].NodePort))
 	}
-	configData := fmt.Sprintf(TemplateTCP, upstreamName, hostRecord.String(), port.Port, upstreamName, upstreamName)
+	configData := fmt.Sprintf(TemplateTCP, upstreamName, hostRecord.String(), service.Ports[0].Name, upstreamName, upstreamName)
 	configFile := filepath.Join(tcpConfDir, "tcp."+upstreamName)
 
 	// if action is ActionDel, it means that k8s service object was deleted,
 	// and we should delete the corresponding nginx configuration file.
-	if action == ActionDel {
-		logrus.Debugf("delete nginx config: %s", configFile)
-		os.Remove(configFile)
-		return nil, true
-	}
 
 	// if action is ActionAdd, it means that k8s service object exists.
 	// we should create the corresponding nginx configuration file.
