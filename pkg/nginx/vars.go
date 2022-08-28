@@ -22,9 +22,21 @@ const (
 	ProtocolHTTPS Protocol = "HTTPS"
 )
 
-type Action string
+type ActionType string
 
 const (
-	ActionAdd = "ADD"
-	ActionDel = "DEL"
+	ActionTypeAdd    = "ADD"
+	ActionTypeDelete = "DELETE"
 )
+
+type ServiceInfo struct {
+	Action    ActionType
+	Namespace string
+	Name      string
+	PortsInfo []PortInfo
+}
+
+type PortInfo struct {
+	Protocol string
+	Name     string
+}
