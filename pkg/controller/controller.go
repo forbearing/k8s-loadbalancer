@@ -10,8 +10,7 @@ import (
 	"github.com/forbearing/k8s/util/annotations"
 	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -22,7 +21,7 @@ import (
 )
 
 const (
-	LoadBalancerAnnotation = "k8s-loadbalancer=true"
+	LoadBalancerAnnotation = "loadbalancer=true"
 )
 
 type QueueType string
@@ -37,8 +36,7 @@ type Controller struct {
 	serviceLister  corelisters.ServiceLister
 	serviceSynced  cache.InformerSynced
 
-	addQueue    workqueue.RateLimitingInterface
-	deleteQueue workqueue.RateLimitingInterface
+	workqueue workqueue.RateLimitingInterface
 
 	recorder record.EventRecorder
 }
@@ -48,8 +46,7 @@ func NewController(serviceHandler *service.Handler) *Controller {
 		serviceHandler: serviceHandler,
 		serviceLister:  serviceHandler.Lister(),
 		serviceSynced:  serviceHandler.Informer().HasSynced,
-		addQueue:       workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "loadbalancer"),
-		deleteQueue:    workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "loadbalancer"),
+		workqueue:      workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "loadbalancer"),
 	}
 
 	logrus.Info("Setting up event handlers")
@@ -65,8 +62,7 @@ func NewController(serviceHandler *service.Handler) *Controller {
 // Run
 func (c *Controller) Run(workers int, stopCh <-chan struct{}) error {
 	defer utilruntime.HandleCrash()
-	defer c.addQueue.ShutDown()
-	defer c.deleteQueue.ShutDown()
+	defer c.workqueue.ShutDown()
 
 	logrus.Info("Starting loadbalancer controller")
 
@@ -76,8 +72,7 @@ func (c *Controller) Run(workers int, stopCh <-chan struct{}) error {
 	}
 
 	logrus.Info("Starting workers")
-	go wait.Until(c.processAddQueue, time.Second, stopCh)
-	go wait.Until(c.processDeleteQueue, time.Second, stopCh)
+	go wait.Until(c.runWorkers, time.Second, stopCh)
 
 	logrus.Info("Started workers")
 	<-stopCh
@@ -87,65 +82,41 @@ func (c *Controller) Run(workers int, stopCh <-chan struct{}) error {
 }
 
 // processAddQueue()
-func (c *Controller) processAddQueue() {
-	for c.processNextItem(QueueTypeAdd) {
+func (c *Controller) runWorkers() {
+	for c.processNextWorkItem() {
 	}
 }
 
-// processDeleteQueue
-func (c *Controller) processDeleteQueue() {
-	for c.processNextItem(QueueTypeDelete) {
-	}
-}
-
-// processNextItem
-func (c *Controller) processNextItem(queuetype QueueType) bool {
-	switch queuetype {
-	case QueueTypeAdd:
-		obj, shutdown := c.addQueue.Get()
-		if shutdown {
-			return false
-		}
-
-		err := func(obj interface{}) error {
-			defer c.addQueue.Done(obj)
-			if err := c.processNginx(obj); err != nil {
-				return fmt.Errorf(`error syncing "%#v": %s, requeuing`, obj, err.Error())
-			}
-			c.addQueue.Forget(obj)
-			logrus.Infof(`Successfully synced "%#v"`, obj)
-			return nil
-		}(obj)
-
-		if err != nil {
-			utilruntime.HandleError(err)
-			return true
-		}
-		return true
-	case QueueTypeDelete:
-		obj, shutdown := c.deleteQueue.Get()
-		if shutdown {
-			return false
-		}
-
-		err := func(obj interface{}) error {
-			defer c.deleteQueue.Done(obj)
-			if err := c.processNginx(obj); err != nil {
-				return fmt.Errorf(`error syncing "%#v": %s, requeuing`, obj, err.Error())
-			}
-			c.deleteQueue.Forget(obj)
-			logrus.Infof(`Successfully synced "%s"`, obj)
-			return nil
-		}(obj)
-
-		if err != nil {
-			utilruntime.HandleError(err)
-			return true
-		}
-		return true
-	default:
+// processNextWorkItem
+func (c *Controller) processNextWorkItem() bool {
+	obj, shutdown := c.workqueue.Get()
+	if shutdown {
 		return false
 	}
+	nginxService := obj.(*nginx.Service)
+	l := logrus.WithFields(logrus.Fields{
+		"action":    nginxService.Action,
+		"namespace": nginxService.Namespace,
+		"name":      nginxService.Name,
+	})
+
+	err := func(obj interface{}) error {
+		defer c.workqueue.Done(obj)
+		if err := c.processNginx(obj); err != nil {
+			//return fmt.Errorf(`error syncing "%+v": %s, requeuing`, obj, err.Error())
+			l.Errorf("Failed to processed nginx config: %s", err.Error())
+			return err
+		}
+		c.workqueue.Forget(obj)
+		l.Info("Successfully processed nginx config")
+		return nil
+	}(obj)
+
+	if err != nil {
+		utilruntime.HandleError(err)
+		return true
+	}
+	return true
 }
 
 //// runWorkers
@@ -197,109 +168,134 @@ func (c *Controller) processNginx(obj interface{}) error {
 	//}
 	//return n.Err()
 
-	logrus.Debug(nginxService)
+	_ = nginxService
+	//logrus.Debug("start process nginx")
 	return nil
 }
 
 // addService
 func (c *Controller) addService(obj interface{}) {
+	logger := logrus.WithField("event", "add")
+	nginxService := c.constructNginxService(obj)
 	// determine whether the service object is LoadBalancer type and have specified annotation.
 	// if not meet the condition, skip enqueue.
-	if !c.filterService(obj) {
-		return
+	if c.isMeetCondition(logger, obj) {
+		// enqueue Service object containing the nginx configuration filename we shoud create
+		nginxService.Action = nginx.ActionTypeAdd
+		c.workqueue.Add(nginxService)
 	}
-
-	// enqueue Service object containing the nginx configuration filename we shoud create
-	nginxService := c.constructServiceInfo(obj)
-	nginxService.Action = nginx.ActionTypeAdd
-	c.addQueue.Add(nginxService)
 }
 
 // updateService
 func (c *Controller) updateService(oldObj, newObj interface{}) {
+	logger := logrus.WithField("event", "update")
 	// two different version of the same service object always have different ResourceVersion.
 	// if ResourceVersion is the same, skip enqueue.
 	oldSvc := oldObj.(*corev1.Service)
 	newSvc := newObj.(*corev1.Service)
 	if oldSvc.ResourceVersion == newSvc.ResourceVersion {
+		logger.Debugf("k8s service updated, but ResourceVersion is the same, skip enqueue.")
 		return
 	}
 
-	oldServiceInfo := c.constructServiceInfo(oldObj)
-	newServiceInfo := c.constructServiceInfo(newObj)
-	// if old Service deep equal to new nginxService, skip enqueue
-	if reflect.DeepEqual(oldServiceInfo, newServiceInfo) {
+	oldNginxService := c.constructNginxService(oldObj)
+	newNginxService := c.constructNginxService(newObj)
+
+	// if the old nginx.Service deep equal to the new nginx.Service, it's no need to enqueue
+	if reflect.DeepEqual(oldNginxService, newNginxService) {
 		return
 	}
-	// enqueue Service object containing the nginx configuration filename we should remove
-	oldServiceInfo.Action = nginx.ActionTypeDelete
-	c.deleteQueue.Add(oldServiceInfo)
 
+	// you should always enqueue oldNginxService before newNginxService.
+	//
+	// determine whether the old service object is LoadBalancer type and have specified annotation.
+	// if not meet the condition, skip enqueue.
+	if c.isMeetCondition(logger.WithField("version", "old"), oldObj) {
+		// enqueue Service object containing the nginx configuration filename we should remove
+		oldNginxService.Action = nginx.ActionTypeDel
+		c.workqueue.Add(oldNginxService)
+	}
 	// determine whether the new service object is LoadBalancer type and have specified annotation.
 	// if not meet the condition, skip enqueue.
-	if !c.filterService(newObj) {
-		return
+	if c.isMeetCondition(logger.WithField("version", "new"), newObj) {
+		// enqueue Service object containing the nginx configuration filename we should create
+		newNginxService.Action = nginx.ActionTypeAdd
+		c.workqueue.Add(newNginxService)
 	}
-	// enqueue Service object containing the nginx configuration filename we should create
-	newServiceInfo.Action = nginx.ActionTypeAdd
-	c.addQueue.Add(newServiceInfo)
+
 }
 
 // deleteService
 func (c *Controller) deleteService(obj interface{}) {
-	// enqueue items containing the nginx configuration filename we should remove
-	nginxService := c.constructServiceInfo(obj)
-	nginxService.Action = nginx.ActionTypeDelete
-	c.deleteQueue.Add(nginxService)
+	logger := logrus.WithField("event", "delete")
+	nginxService := c.constructNginxService(obj)
+	// determine whether the service object is LoadBalancer type and have specified annotation.
+	// if not meet the condition, skip enqueue.
+	if c.isMeetCondition(logger, obj) {
+		// enqueue items containing the nginx configuration filename we should remove
+		nginxService.Action = nginx.ActionTypeDel
+		c.workqueue.Add(nginxService)
+	}
 }
 
-// filterService will check the k8s service object meet the condition to enqueue.
-func (c *Controller) filterService(obj interface{}) bool {
+// isMeetCondition will check the k8s service object meet the condition to enqueue.
+func (c *Controller) isMeetCondition(logger *logrus.Entry, obj interface{}) bool {
 	// if the k8s object don't have metadata, return false
-	namespacedName, err := cache.MetaNamespaceKeyFunc(obj)
+	accessor, err := meta.Accessor(obj)
 	if err != nil {
 		logrus.Errorf("the k8s object has no metadata: %s", err.Error())
 		return false
 	}
 
+	l := logger.WithFields(logrus.Fields{
+		"namespace": accessor.GetNamespace(),
+		"name":      accessor.GetName(),
+	})
+
 	serviceType, err := c.serviceHandler.GetType(obj)
 	if err != nil {
-		logrus.Errorf("service handler get service type error: %s", err.Error())
+		l.Errorf("service handler get service type error: %s", err.Error())
 		return false
 	}
 	// if the k8s service type is not LoadBalancer, return false.
 	if serviceType != string(corev1.ServiceTypeLoadBalancer) {
-		logrus.Debugf(`service "%s" type is "%s", skip enqueue`, namespacedName, serviceType)
+		l.Debugf(`service type is "%s", skip enqueue`, serviceType)
 		return false
 	}
 	// if the k8s service don't contains the annotation, return false
 	if !annotations.Has(obj.(runtime.Object), LoadBalancerAnnotation) {
-		logrus.Debugf(`service "%s" don't have annotation: "%s", skip enqueue`, namespacedName, LoadBalancerAnnotation)
+		l.Debugf(`service don't have annotation: "%s", skip enqueue`, LoadBalancerAnnotation)
 		return false
 	}
+
+	l.Debugf(`service meet condition, start enqueue`)
 	return true
 }
 
-// constructServiceInfo
-func (c *Controller) constructServiceInfo(obj interface{}) *nginx.Service {
-	namespace := obj.(metav1.Object).GetNamespace()
-	name := obj.(metav1.Object).GetName()
-
-	//var svcObj = &corev1.Service{}
-	svcObj, err := c.serviceLister.Services(namespace).Get(name)
-	if err != nil {
-		// the k8s service resourcemy no longer exist, in which case we stop processing
-		if k8serrors.IsNotFound(err) {
-			logrus.Errorf(`service "%s/%s" in listers not longer exists`, namespace, name)
-			return nil
-		}
-		logrus.Errorf("get service resource from listers error: %s", err.Error())
+// constructNginxService
+func (c *Controller) constructNginxService(obj interface{}) *nginx.Service {
+	svcObj, ok := obj.(*corev1.Service)
+	if !ok {
+		logrus.Errorf("the object is not *corev1.Service")
 		return nil
 	}
+	namespace := svcObj.Namespace
+	name := svcObj.Name
 
 	var nginxService = &nginx.Service{
-		Namespace: svcObj.Namespace,
-		Name:      svcObj.Name,
+		Namespace: namespace,
+		Name:      name,
+	}
+
+	serviceType, err := c.serviceHandler.GetType(obj)
+	if err != nil {
+		logrus.Errorf("service handler get service type error: %s", err.Error())
+	}
+	if serviceType == string(corev1.ServiceTypeLoadBalancer) {
+		nginxService.MeetType = true
+	}
+	if annotations.Has(obj.(runtime.Object), LoadBalancerAnnotation) {
+		nginxService.MeetAnnotations = true
 	}
 
 	var ports []nginx.Port
