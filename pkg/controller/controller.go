@@ -40,8 +40,7 @@ type Controller struct {
 	addQueue    workqueue.RateLimitingInterface
 	deleteQueue workqueue.RateLimitingInterface
 
-	workqueue workqueue.RateLimitingInterface
-	recorder  record.EventRecorder
+	recorder record.EventRecorder
 }
 
 func NewController(serviceHandler *service.Handler) *Controller {
@@ -66,7 +65,6 @@ func NewController(serviceHandler *service.Handler) *Controller {
 // Run
 func (c *Controller) Run(workers int, stopCh <-chan struct{}) error {
 	defer utilruntime.HandleCrash()
-	defer c.workqueue.ShutDown()
 	defer c.addQueue.ShutDown()
 	defer c.deleteQueue.ShutDown()
 
@@ -78,12 +76,8 @@ func (c *Controller) Run(workers int, stopCh <-chan struct{}) error {
 	}
 
 	logrus.Info("Starting workers")
-	for i := 0; i < workers/2; i++ {
-		go wait.Until(c.processAddQueue, time.Second, stopCh)
-	}
-	for i := 0; i < workers/2; i++ {
-		go wait.Until(c.processDeleteQueue, time.Second, stopCh)
-	}
+	go wait.Until(c.processAddQueue, time.Second, stopCh)
+	go wait.Until(c.processDeleteQueue, time.Second, stopCh)
 
 	logrus.Info("Started workers")
 	<-stopCh
@@ -115,11 +109,11 @@ func (c *Controller) processNextItem(queuetype QueueType) bool {
 
 		err := func(obj interface{}) error {
 			defer c.addQueue.Done(obj)
-			if err := c.processNginx(obj.(string), QueueTypeAdd); err != nil {
-				return fmt.Errorf(`error syncing "%s": %s, requeuing`, obj, err.Error())
+			if err := c.processNginx(obj); err != nil {
+				return fmt.Errorf(`error syncing "%#v": %s, requeuing`, obj, err.Error())
 			}
 			c.addQueue.Forget(obj)
-			logrus.Infof(`Successfully synced "%s"`, obj)
+			logrus.Infof(`Successfully synced "%#v"`, obj)
 			return nil
 		}(obj)
 
@@ -136,8 +130,8 @@ func (c *Controller) processNextItem(queuetype QueueType) bool {
 
 		err := func(obj interface{}) error {
 			defer c.deleteQueue.Done(obj)
-			if err := c.processNginx(obj.(string), QueueTypeDelete); err != nil {
-				return fmt.Errorf(`error syncing "%s": %s, requeuing`, obj, err.Error())
+			if err := c.processNginx(obj); err != nil {
+				return fmt.Errorf(`error syncing "%#v": %s, requeuing`, obj, err.Error())
 			}
 			c.deleteQueue.Forget(obj)
 			logrus.Infof(`Successfully synced "%s"`, obj)
@@ -154,51 +148,56 @@ func (c *Controller) processNextItem(queuetype QueueType) bool {
 	}
 }
 
-// runWorkers
-func (c *Controller) runWorkers() {
-	for c.processNextWorkItem() {
-	}
-}
+//// runWorkers
+//func (c *Controller) runWorkers() {
+//    for c.processNextWorkItem() {
+//    }
+//}
 
-// processNextWorkItem
-func (c *Controller) processNextWorkItem() bool {
-	obj, shutdown := c.workqueue.Get()
-	if shutdown {
-		return false
-	}
+//// processNextWorkItem
+//func (c *Controller) processNextWorkItem() bool {
+//    obj, shutdown := c.workqueue.Get()
+//    if shutdown {
+//        return false
+//    }
 
-	err := func(obj interface{}) error {
-		defer c.workqueue.Done(obj)
-		var key string
-		var ok bool
-		if key, ok = obj.(string); !ok {
-			c.workqueue.Forget(obj)
-			utilruntime.HandleError(fmt.Errorf("expected string in workqueue but got %#v", obj))
-		}
-		if err := c.processNginx(key, ""); err != nil {
-			c.workqueue.AddRateLimited(key)
-			return fmt.Errorf("error syncing '%s': %s, requeuing", key, err.Error())
-		}
-		c.workqueue.Forget(obj)
-		logrus.Infof("Successfully synced '%s'", key)
-		return nil
-	}(obj)
+//    err := func(obj interface{}) error {
+//        defer c.workqueue.Done(obj)
+//        var key string
+//        var ok bool
+//        if key, ok = obj.(string); !ok {
+//            c.workqueue.Forget(obj)
+//            utilruntime.HandleError(fmt.Errorf("expected string in workqueue but got %#v", obj))
+//        }
+//        if err := c.processNginx(key, ""); err != nil {
+//            c.workqueue.AddRateLimited(key)
+//            return fmt.Errorf("error syncing '%s': %s, requeuing", key, err.Error())
+//        }
+//        c.workqueue.Forget(obj)
+//        logrus.Infof("Successfully synced '%s'", key)
+//        return nil
+//    }(obj)
 
-	if err != nil {
-		utilruntime.HandleError(err)
-		return true
-	}
+//    if err != nil {
+//        utilruntime.HandleError(err)
+//        return true
+//    }
 
-	return true
-}
+//    return true
+//}
 
 // processNginx
-func (c *Controller) processNginx(key string, queuetype QueueType) error {
-	n := &nginx.Nginx{}
-	switch QueueType {
-	case QueueTypeAdd:
-		//for n.Do()
+func (c *Controller) processNginx(obj interface{}) error {
+	nginxService, ok := obj.(*nginx.Service)
+	if !ok {
+		return fmt.Errorf("object type is not *nginx.Service")
 	}
+	//n := &nginx.Nginx{}
+	//for n.Do(*nginxService) {
+	//}
+	//return n.Err()
+
+	logrus.Debug(nginxService)
 	return nil
 }
 
@@ -210,10 +209,10 @@ func (c *Controller) addService(obj interface{}) {
 		return
 	}
 
-	// enqueue ServiceInfo object containing the nginx configuration filename we shoud create
-	serviceInfo := c.constructServiceInfo(obj)
-	serviceInfo.Action = nginx.ActionTypeAdd
-	c.addQueue.Add(serviceInfo)
+	// enqueue Service object containing the nginx configuration filename we shoud create
+	nginxService := c.constructServiceInfo(obj)
+	nginxService.Action = nginx.ActionTypeAdd
+	c.addQueue.Add(nginxService)
 }
 
 // updateService
@@ -228,11 +227,11 @@ func (c *Controller) updateService(oldObj, newObj interface{}) {
 
 	oldServiceInfo := c.constructServiceInfo(oldObj)
 	newServiceInfo := c.constructServiceInfo(newObj)
-	// if old ServiceInfo deep equal to new serviceInfo, skip enqueue
+	// if old Service deep equal to new nginxService, skip enqueue
 	if reflect.DeepEqual(oldServiceInfo, newServiceInfo) {
 		return
 	}
-	// enqueue ServiceInfo object containing the nginx configuration filename we should remove
+	// enqueue Service object containing the nginx configuration filename we should remove
 	oldServiceInfo.Action = nginx.ActionTypeDelete
 	c.deleteQueue.Add(oldServiceInfo)
 
@@ -241,7 +240,7 @@ func (c *Controller) updateService(oldObj, newObj interface{}) {
 	if !c.filterService(newObj) {
 		return
 	}
-	// enqueue ServiceInfo object containing the nginx configuration filename we should create
+	// enqueue Service object containing the nginx configuration filename we should create
 	newServiceInfo.Action = nginx.ActionTypeAdd
 	c.addQueue.Add(newServiceInfo)
 }
@@ -249,9 +248,9 @@ func (c *Controller) updateService(oldObj, newObj interface{}) {
 // deleteService
 func (c *Controller) deleteService(obj interface{}) {
 	// enqueue items containing the nginx configuration filename we should remove
-	serviceInfo := c.constructServiceInfo(obj)
-	serviceInfo.Action = nginx.ActionTypeDelete
-	c.deleteQueue.Add(serviceInfo)
+	nginxService := c.constructServiceInfo(obj)
+	nginxService.Action = nginx.ActionTypeDelete
+	c.deleteQueue.Add(nginxService)
 }
 
 // filterService will check the k8s service object meet the condition to enqueue.
@@ -282,7 +281,7 @@ func (c *Controller) filterService(obj interface{}) bool {
 }
 
 // constructServiceInfo
-func (c *Controller) constructServiceInfo(obj interface{}) *nginx.ServiceInfo {
+func (c *Controller) constructServiceInfo(obj interface{}) *nginx.Service {
 	namespace := obj.(metav1.Object).GetNamespace()
 	name := obj.(metav1.Object).GetName()
 
@@ -298,19 +297,20 @@ func (c *Controller) constructServiceInfo(obj interface{}) *nginx.ServiceInfo {
 		return nil
 	}
 
-	var serviceInfo = &nginx.ServiceInfo{
+	var nginxService = &nginx.Service{
 		Namespace: svcObj.Namespace,
 		Name:      svcObj.Name,
 	}
 
-	var portsInfo []nginx.PortInfo
-	for _, port := range svcObj.Spec.Ports {
-		portInfo := nginx.PortInfo{
-			Protocol: string(port.Protocol),
-			Name:     port.Name,
+	var ports []nginx.Port
+	for _, p := range svcObj.Spec.Ports {
+		portInfo := nginx.Port{
+			Protocol: string(p.Protocol),
+			Name:     p.Name,
+			NodePort: p.NodePort,
 		}
-		portsInfo = append(portsInfo, portInfo)
+		ports = append(ports, portInfo)
 	}
-	serviceInfo.PortsInfo = portsInfo
-	return serviceInfo
+	nginxService.Ports = ports
+	return nginxService
 }
