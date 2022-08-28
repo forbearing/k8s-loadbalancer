@@ -2,6 +2,7 @@ package controller
 
 import (
 	"fmt"
+	"reflect"
 	"time"
 
 	"github.com/forbearing/k8s-loadbalancer/pkg/nginx"
@@ -10,6 +11,7 @@ import (
 	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -23,12 +25,23 @@ const (
 	LoadBalancerAnnotation = "k8s-loadbalancer=true"
 )
 
+type QueueType string
+
+const (
+	QueueTypeAdd    QueueType = "Add"
+	QueueTypeDelete QueueType = "Delete"
+)
+
 type Controller struct {
 	serviceHandler *service.Handler
 	serviceLister  corelisters.ServiceLister
 	serviceSynced  cache.InformerSynced
-	workqueue      workqueue.RateLimitingInterface
-	recorder       record.EventRecorder
+
+	addQueue    workqueue.RateLimitingInterface
+	deleteQueue workqueue.RateLimitingInterface
+
+	workqueue workqueue.RateLimitingInterface
+	recorder  record.EventRecorder
 }
 
 func NewController(serviceHandler *service.Handler) *Controller {
@@ -36,21 +49,15 @@ func NewController(serviceHandler *service.Handler) *Controller {
 		serviceHandler: serviceHandler,
 		serviceLister:  serviceHandler.Lister(),
 		serviceSynced:  serviceHandler.Informer().HasSynced,
-		workqueue:      workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "loadbalancer"),
+		addQueue:       workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "loadbalancer"),
+		deleteQueue:    workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "loadbalancer"),
 	}
 
 	logrus.Info("Setting up event handlers")
 	serviceHandler.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc: controller.enqueueService,
-		UpdateFunc: func(old, new interface{}) {
-			newSvc := new.(*corev1.Service)
-			oldSvc := old.(*corev1.Service)
-			if newSvc.ResourceVersion == oldSvc.ResourceVersion {
-				return
-			}
-			controller.enqueueService(new)
-		},
-		DeleteFunc: controller.enqueueService,
+		AddFunc:    controller.addService,
+		UpdateFunc: controller.updateService,
+		DeleteFunc: controller.deleteService,
 	})
 
 	return controller
@@ -60,6 +67,8 @@ func NewController(serviceHandler *service.Handler) *Controller {
 func (c *Controller) Run(workers int, stopCh <-chan struct{}) error {
 	defer utilruntime.HandleCrash()
 	defer c.workqueue.ShutDown()
+	defer c.addQueue.ShutDown()
+	defer c.deleteQueue.ShutDown()
 
 	logrus.Info("Starting loadbalancer controller")
 
@@ -69,8 +78,11 @@ func (c *Controller) Run(workers int, stopCh <-chan struct{}) error {
 	}
 
 	logrus.Info("Starting workers")
-	for i := 0; i < workers; i++ {
-		go wait.Until(c.runWorkers, time.Second, stopCh)
+	for i := 0; i < workers/2; i++ {
+		go wait.Until(c.processAddQueue, time.Second, stopCh)
+	}
+	for i := 0; i < workers/2; i++ {
+		go wait.Until(c.processDeleteQueue, time.Second, stopCh)
 	}
 
 	logrus.Info("Started workers")
@@ -78,6 +90,68 @@ func (c *Controller) Run(workers int, stopCh <-chan struct{}) error {
 	logrus.Info("Shutting down workers")
 
 	return nil
+}
+
+// processAddQueue()
+func (c *Controller) processAddQueue() {
+	for c.processNextItem(QueueTypeAdd) {
+	}
+}
+
+// processDeleteQueue
+func (c *Controller) processDeleteQueue() {
+	for c.processNextItem(QueueTypeDelete) {
+	}
+}
+
+// processNextItem
+func (c *Controller) processNextItem(queuetype QueueType) bool {
+	switch queuetype {
+	case QueueTypeAdd:
+		obj, shutdown := c.addQueue.Get()
+		if shutdown {
+			return false
+		}
+
+		err := func(obj interface{}) error {
+			defer c.addQueue.Done(obj)
+			if err := c.processNginx(obj.(string), QueueTypeAdd); err != nil {
+				return fmt.Errorf(`error syncing "%s": %s, requeuing`, obj, err.Error())
+			}
+			c.addQueue.Forget(obj)
+			logrus.Infof(`Successfully synced "%s"`, obj)
+			return nil
+		}(obj)
+
+		if err != nil {
+			utilruntime.HandleError(err)
+			return true
+		}
+		return true
+	case QueueTypeDelete:
+		obj, shutdown := c.deleteQueue.Get()
+		if shutdown {
+			return false
+		}
+
+		err := func(obj interface{}) error {
+			defer c.deleteQueue.Done(obj)
+			if err := c.processNginx(obj.(string), QueueTypeDelete); err != nil {
+				return fmt.Errorf(`error syncing "%s": %s, requeuing`, obj, err.Error())
+			}
+			c.deleteQueue.Forget(obj)
+			logrus.Infof(`Successfully synced "%s"`, obj)
+			return nil
+		}(obj)
+
+		if err != nil {
+			utilruntime.HandleError(err)
+			return true
+		}
+		return true
+	default:
+		return false
+	}
 }
 
 // runWorkers
@@ -101,7 +175,7 @@ func (c *Controller) processNextWorkItem() bool {
 			c.workqueue.Forget(obj)
 			utilruntime.HandleError(fmt.Errorf("expected string in workqueue but got %#v", obj))
 		}
-		if err := c.processNginx(key); err != nil {
+		if err := c.processNginx(key, ""); err != nil {
 			c.workqueue.AddRateLimited(key)
 			return fmt.Errorf("error syncing '%s': %s, requeuing", key, err.Error())
 		}
@@ -119,57 +193,124 @@ func (c *Controller) processNextWorkItem() bool {
 }
 
 // processNginx
-func (c *Controller) processNginx(key string) error {
-	// convert the namespace/name string into a distinct namespace and name
-	namespace, name, err := cache.SplitMetaNamespaceKey(key)
-	if err != nil {
-		utilruntime.HandleError(fmt.Errorf("invalid resource key: %s", key))
-		return nil
-	}
-
+func (c *Controller) processNginx(key string, queuetype QueueType) error {
 	n := &nginx.Nginx{}
-	var svcObj = &corev1.Service{}
-	// if k8s service object exist, add nginx config.
-	if svcObj, err = c.serviceHandler.WithNamespace(namespace).Get(name); err == nil {
-		n.Do(nginx.ActionAdd, nginx.ProtocolTCP, namespace, name, svcObj.Spec.Ports)
-		return n.Err()
+	switch QueueType {
+	case QueueTypeAdd:
+		//for n.Do()
 	}
-	// if k8s service object not exist, delete nginx config.
-	if k8serrors.IsNotFound(err) {
-		for n.Do(nginx.ActionDel, nginx.ProtocolTCP, namespace, name, svcObj.Spec.Ports) {
-		}
-		return n.Err()
-	}
-
-	utilruntime.HandleError(fmt.Errorf("service handler get service error: %s", err.Error()))
-	return err
+	return nil
 }
 
-// enqueueService
-func (c *Controller) enqueueService(obj interface{}) {
+// addService
+func (c *Controller) addService(obj interface{}) {
+	// determine whether the service object is LoadBalancer type and have specified annotation.
+	// if not meet the condition, skip enqueue.
+	if !c.filterService(obj) {
+		return
+	}
+
+	// enqueue ServiceInfo object containing the nginx configuration filename we shoud create
+	serviceInfo := c.constructServiceInfo(obj)
+	serviceInfo.Action = nginx.ActionTypeAdd
+	c.addQueue.Add(serviceInfo)
+}
+
+// updateService
+func (c *Controller) updateService(oldObj, newObj interface{}) {
+	// two different version of the same service object always have different ResourceVersion.
+	// if ResourceVersion is the same, skip enqueue.
+	oldSvc := oldObj.(*corev1.Service)
+	newSvc := newObj.(*corev1.Service)
+	if oldSvc.ResourceVersion == newSvc.ResourceVersion {
+		return
+	}
+
+	oldServiceInfo := c.constructServiceInfo(oldObj)
+	newServiceInfo := c.constructServiceInfo(newObj)
+	// if old ServiceInfo deep equal to new serviceInfo, skip enqueue
+	if reflect.DeepEqual(oldServiceInfo, newServiceInfo) {
+		return
+	}
+	// enqueue ServiceInfo object containing the nginx configuration filename we should remove
+	oldServiceInfo.Action = nginx.ActionTypeDelete
+	c.deleteQueue.Add(oldServiceInfo)
+
+	// determine whether the new service object is LoadBalancer type and have specified annotation.
+	// if not meet the condition, skip enqueue.
+	if !c.filterService(newObj) {
+		return
+	}
+	// enqueue ServiceInfo object containing the nginx configuration filename we should create
+	newServiceInfo.Action = nginx.ActionTypeAdd
+	c.addQueue.Add(newServiceInfo)
+}
+
+// deleteService
+func (c *Controller) deleteService(obj interface{}) {
+	// enqueue items containing the nginx configuration filename we should remove
+	serviceInfo := c.constructServiceInfo(obj)
+	serviceInfo.Action = nginx.ActionTypeDelete
+	c.deleteQueue.Add(serviceInfo)
+}
+
+// filterService will check the k8s service object meet the condition to enqueue.
+func (c *Controller) filterService(obj interface{}) bool {
+	// if the k8s object don't have metadata, return false
 	namespacedName, err := cache.MetaNamespaceKeyFunc(obj)
 	if err != nil {
-		utilruntime.HandleError(err)
-		return
+		logrus.Errorf("the k8s object has no metadata: %s", err.Error())
+		return false
 	}
 
 	serviceType, err := c.serviceHandler.GetType(obj)
 	if err != nil {
 		logrus.Errorf("service handler get service type error: %s", err.Error())
-		return
+		return false
 	}
-
-	// if k8s service type is not LoadBalancer, skip it.
+	// if the k8s service type is not LoadBalancer, return false.
 	if serviceType != string(corev1.ServiceTypeLoadBalancer) {
-		logrus.Debugf(`service "%s" type is not LoadBalancer(is "%s"), skip enqueue`, namespacedName, serviceType)
-		return
+		logrus.Debugf(`service "%s" type is "%s", skip enqueue`, namespacedName, serviceType)
+		return false
 	}
-	// if the k8s object not contains the annotation, skip it.
+	// if the k8s service don't contains the annotation, return false
 	if !annotations.Has(obj.(runtime.Object), LoadBalancerAnnotation) {
 		logrus.Debugf(`service "%s" don't have annotation: "%s", skip enqueue`, namespacedName, LoadBalancerAnnotation)
-		return
+		return false
+	}
+	return true
+}
+
+// constructServiceInfo
+func (c *Controller) constructServiceInfo(obj interface{}) *nginx.ServiceInfo {
+	namespace := obj.(metav1.Object).GetNamespace()
+	name := obj.(metav1.Object).GetName()
+
+	//var svcObj = &corev1.Service{}
+	svcObj, err := c.serviceLister.Services(namespace).Get(name)
+	if err != nil {
+		// the k8s service resourcemy no longer exist, in which case we stop processing
+		if k8serrors.IsNotFound(err) {
+			logrus.Errorf(`service "%s/%s" in listers not longer exists`, namespace, name)
+			return nil
+		}
+		logrus.Errorf("get service resource from listers error: %s", err.Error())
+		return nil
 	}
 
-	logrus.Debugf("enqueue service: '%s'", namespacedName)
-	c.workqueue.Add(namespacedName)
+	var serviceInfo = &nginx.ServiceInfo{
+		Namespace: svcObj.Namespace,
+		Name:      svcObj.Name,
+	}
+
+	var portsInfo []nginx.PortInfo
+	for _, port := range svcObj.Spec.Ports {
+		portInfo := nginx.PortInfo{
+			Protocol: string(port.Protocol),
+			Name:     port.Name,
+		}
+		portsInfo = append(portsInfo, portInfo)
+	}
+	serviceInfo.PortsInfo = portsInfo
+	return serviceInfo
 }
