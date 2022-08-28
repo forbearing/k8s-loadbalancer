@@ -25,8 +25,8 @@ const (
 type ActionType string
 
 const (
-	ActionTypeAdd    = "ADD"
-	ActionTypeDelete = "DELETE"
+	ActionTypeAdd = "ADD"
+	ActionTypeDel = "DEL"
 )
 
 type Service struct {
@@ -34,6 +34,9 @@ type Service struct {
 	Namespace string
 	Name      string
 	Ports     []Port
+
+	MeetType        bool
+	MeetAnnotations bool
 }
 
 type Port struct {
