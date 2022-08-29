@@ -17,78 +17,105 @@ import (
 // GenerateNginxConf generate /etc/nginx/nginx.conf config file.
 // it will return true, if /etc/nginx/nginx.conf changed
 func GenerateNginxConf() (error, bool) {
-	// if nginx config file not exist, generate it.
-	if _, err := os.Stat(nginxConfFile); errors.Is(err, os.ErrNotExist) {
-		file, err := os.Create(nginxConfFile)
-		if err != nil {
-			return err, false
-		}
-		if _, err := file.WriteString(TemplateNginxConf); err != nil {
-			return err, false
-		}
-		file.Close()
-		return nil, true
-	} else if err != nil { // os.Stat error
-		return err, false
-	}
+	return generateFile(nginxConfFile, TemplateNginxConf)
+	//// if nginx config file not exist, generate it.
+	//if _, err := os.Stat(nginxConfFile); errors.Is(err, os.ErrNotExist) {
+	//    file, err := os.Create(nginxConfFile)
+	//    if err != nil {
+	//        return err, false
+	//    }
+	//    if _, err := file.WriteString(TemplateNginxConf); err != nil {
+	//        return err, false
+	//    }
+	//    file.Close()
+	//    return nil, true
+	//} else if err != nil { // os.Stat error
+	//    return err, false
+	//}
 
-	// calculate the nginx config file hash.
+	//// calculate the nginx config file hash.
+	//var (
+	//    err                      error
+	//    oldData, newData         []byte
+	//    oldHashCode, newHashCode string
+	//)
+	//if oldData, err = ioutil.ReadFile(nginxConfFile); err != nil {
+	//    return err, false
+	//}
+	//newData = []byte(TemplateNginxConf)
+	//if oldHashCode, err = genHashCode(oldData); err != nil {
+	//    return err, false
+	//}
+	//if newHashCode, err = genHashCode(newData); err != nil {
+	//    return err, false
+	//}
+	//logrus.Debugf("%s hash before: %s", nginxConfFile, oldHashCode)
+	//logrus.Debugf("%s hash after:  %s", nginxConfFile, newHashCode)
+
+	//// if nginx config file hash code not same, generate the nginx config and overwirte it.
+	//if oldHashCode != newHashCode {
+	//    logrus.Debugf("%s hash is not the same, generate it.", nginxConfFile)
+	//    file, err := os.Create(nginxConfFile)
+	//    if err != nil {
+	//        return err, false
+	//    }
+	//    if _, err := file.Write(newData); err != nil {
+	//        return err, false
+	//    }
+	//    file.Close()
+	//    return nil, true
+	//}
+	//logrus.Debugf("%s hash is same, skip generate it.", nginxConfFile)
+	//return nil, false
+}
+
+// GenerateTCPConf generate /etc/nginx/sites-enabled/xxx.conf config file for proxy tcp traffic.
+func GenerateVirtualHostConf(service *Service) (error, bool) {
+	logrus.Debug("start generate virtual host config file")
+
+	// if upstream host is empty, skip generate nginx config file.
+	if len(args.GetUpstream()) == 0 {
+		logrus.Warn("upstream is empty, skip generate nginx config")
+		return nil, false
+	}
+	logrus.Debugf("upstream host are: %v", args.GetUpstream())
+
+	for _, port := range service.Ports {
+		upstreamName := fmt.Sprintf("%s.%s.%s", service.Namespace, service.Name, port.Name)
+		var upstreamHosts strings.Builder
+		for _, host := range args.GetUpstream() {
+			upstreamHosts.WriteString(fmt.Sprintf("    server %s:%d;\n", host, port.NodePort))
+		}
+		configFile := filepath.Join(tcpConfDir, fmt.Sprintf("%s.%s", strings.ToLower(port.Protocol), upstreamName))
+		configData := fmt.Sprintf(TemplateTCP, upstreamName, upstreamHosts.String(), port.Port, upstreamName, upstreamName)
+
+		// if action is ActionTypeDel, it means that k8s service object was deleted,
+		// and we should delete the corresponding nginx configuration file.
+		if service.Action == ActionTypeDel {
+			logrus.Debugf("start remove nginx config: %s", configFile)
+			if err := os.Remove(configFile); err != nil {
+				logrus.Errorf("remove %s failed", err)
+				return err, false
+			}
+			return nil, true
+		}
+		// if action is ActionTypeAdd, it means that k8s service object exists.
+		// we should create the corresponding nginx configuration file.
+		return generateFile(configFile, configData)
+	}
+	return nil, false
+}
+
+// generateFile
+func generateFile(configFile, configData string) (error, bool) {
 	var (
 		err                      error
 		oldData, newData         []byte
 		oldHashCode, newHashCode string
 	)
-	if oldData, err = ioutil.ReadFile(nginxConfFile); err != nil {
-		return err, false
-	}
-	newData = []byte(TemplateNginxConf)
-	if oldHashCode, err = genHashCode(oldData); err != nil {
-		return err, false
-	}
-	if newHashCode, err = genHashCode(newData); err != nil {
-		return err, false
-	}
-	logrus.Debugf("%s hash before: %s", nginxConfFile, oldHashCode)
-	logrus.Debugf("%s hash after:  %s", nginxConfFile, newHashCode)
 
-	// if nginx config file hash code not same, generate the nginx config and overwirte it.
-	if oldHashCode != newHashCode {
-		logrus.Debugf("%s hash is not the same, generate it.", nginxConfFile)
-		file, err := os.Create(nginxConfFile)
-		if err != nil {
-			return err, false
-		}
-		if _, err := file.Write(newData); err != nil {
-			return err, false
-		}
-		file.Close()
-		return nil, true
-	}
-	logrus.Debugf("%s hash is same, skip generate it.", nginxConfFile)
-	return nil, false
-}
-
-// GenerateTCPConf generate /etc/nginx/sites-enabled/xxx.conf config file for proxy tcp traffic.
-func GenerateVirtualHostConf(service *Service) (error, bool) {
-	upstreamName := fmt.Sprintf("%s.%s.%s", service.Namespace, service.Name, service.Ports[0].Name)
-
-	var hostRecord strings.Builder
-	logrus.Debugf("upstream host are: %v", args.GetUpstream())
-	for _, host := range args.GetUpstream() {
-		hostRecord.WriteString(fmt.Sprintf("    server %s:%d;\n", host, service.Ports[0].NodePort))
-	}
-	configData := fmt.Sprintf(TemplateTCP, upstreamName, hostRecord.String(), service.Ports[0].Name, upstreamName, upstreamName)
-	configFile := filepath.Join(tcpConfDir, "tcp."+upstreamName)
-
-	// if action is ActionDel, it means that k8s service object was deleted,
-	// and we should delete the corresponding nginx configuration file.
-
-	// if action is ActionAdd, it means that k8s service object exists.
-	// we should create the corresponding nginx configuration file.
-	//
 	// if config file not exist, create it.
-	if _, err := os.Stat(configFile); errors.Is(err, os.ErrNotExist) {
-		logrus.Debugf("create nginx config: %s", configFile)
+	if _, err = os.Stat(configFile); errors.Is(err, os.ErrNotExist) {
 		file, err := os.Create(configFile)
 		if err != nil {
 			return err, false
@@ -98,17 +125,11 @@ func GenerateVirtualHostConf(service *Service) (error, bool) {
 		}
 		file.Close()
 		return nil, true
-	} else if err != nil { // os.Stat() error
+	} else if err != nil {
 		return err, false
 	}
 
-	logrus.Debugf("nginx config file: %s already exist, skip generate", configFile)
 	// calculate the nginx config file hash
-	var (
-		err                      error
-		oldData, newData         []byte
-		oldHashCode, newHashCode string
-	)
 	if oldData, err = ioutil.ReadFile(configFile); err != nil {
 		return err, false
 	}
@@ -129,7 +150,7 @@ func GenerateVirtualHostConf(service *Service) (error, bool) {
 		if err != nil {
 			return err, false
 		}
-		if _, err := file.Write(newData); err != nil {
+		if _, err := file.WriteString(configData); err != nil {
 			return err, false
 		}
 		file.Close()
@@ -139,21 +160,7 @@ func GenerateVirtualHostConf(service *Service) (error, bool) {
 	return nil, false
 }
 
-// GenerateUDPConf generate /etc/nginx/sites-enabled/xxx.conf config file for proxy udp traffic.
-func GenerateUDPConf() (error, bool) {
-	return nil, false
-}
-
-// GenerateHTTPConf generate /etc/nginx/sites-enabled/xxx.conf config file for proxy http traffic.
-func GenerateHTTPConf() (error, bool) {
-	return nil, false
-}
-
-// GenerateHTTPConf generate /etc/nginx/sites-enabled/xxx.conf config file for proxy https traffic.
-func GenerateHTTPSConf() (error, bool) {
-	return nil, false
-}
-
+// genHashCode
 func genHashCode(data []byte) (string, error) {
 	hash := sha256.New()
 	if _, err := hash.Write(data); err != nil {

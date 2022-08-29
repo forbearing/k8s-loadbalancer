@@ -31,16 +31,17 @@ const (
 
 type Service struct {
 	Action    ActionType
-	Namespace string
 	Name      string
-	Ports     []Port
+	Namespace string
+	Ports     []ServicePort
 
 	MeetType        bool
 	MeetAnnotations bool
 }
 
-type Port struct {
-	Protocol string
+type ServicePort struct {
 	Name     string
+	Port     int32
 	NodePort int32
+	Protocol string
 }

@@ -78,9 +78,6 @@ func (n *Nginx) Do(service *Service) bool {
 	}
 
 	// generate nginx virtual host config
-	logrus.Debug("start generate virtual host config file")
-	logrus.Debug("start generate tcp config")
-
 	if err, changed = GenerateVirtualHostConf(service); err != nil {
 		n.setErr(err)
 		return false
