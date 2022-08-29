@@ -22,7 +22,7 @@ func GenerateNginxConf() (error, bool) {
 
 // GenerateVirtualHostConf generate /etc/nginx/sites-enabled/xxx.conf config file for proxy traffic.
 func GenerateVirtualHostConf(service *Service) (error, bool) {
-	logrus.Debug("start generate virtual host config file")
+	var changed bool
 
 	// if upstream host is empty, skip generate nginx config file.
 	if len(args.GetUpstream()) == 0 {
@@ -40,21 +40,30 @@ func GenerateVirtualHostConf(service *Service) (error, bool) {
 		configFile := filepath.Join(tcpConfDir, fmt.Sprintf("%s.%s", strings.ToLower(port.Protocol), upstreamName))
 		configData := fmt.Sprintf(TemplateTCP, upstreamName, upstreamHosts.String(), port.Port, upstreamName, upstreamName)
 
-		// if action is ActionTypeDel, it means that k8s service object was deleted,
-		// and we should delete the corresponding nginx configuration file.
-		if service.Action == ActionTypeDel {
-			logrus.Debugf("start remove nginx config: %s", configFile)
+		switch service.Action {
+		case ActionTypeDel:
+			// if action is ActionTypeDel, it means that k8s service object was deleted,
+			// and we should delete the corresponding nginx configuration file.
+			logrus.Debugf("remove nginx config: %s", configFile)
 			if err := os.Remove(configFile); err != nil {
 				logrus.Errorf("remove %s failed", err)
 				return err, false
 			}
-			return nil, true
+			changed = true
+		case ActionTypeAdd:
+			// if action is ActionTypeAdd, it means that k8s service object exists.
+			// we should create the corresponding nginx configuration file.
+			//logrus.Debugf(configFile)
+			err, isChanged := generateFile(configFile, configData)
+			if err != nil {
+				return err, false
+			}
+			if isChanged {
+				changed = true
+			}
 		}
-		// if action is ActionTypeAdd, it means that k8s service object exists.
-		// we should create the corresponding nginx configuration file.
-		return generateFile(configFile, configData)
 	}
-	return nil, false
+	return nil, changed
 }
 
 // generateFile
@@ -67,6 +76,7 @@ func generateFile(configFile, configData string) (error, bool) {
 
 	// if config file not exist, create it.
 	if _, err = os.Stat(configFile); errors.Is(err, os.ErrNotExist) {
+		logrus.Debugf("%s not exist, create it", configFile)
 		file, err := os.Create(configFile)
 		if err != nil {
 			return err, false
@@ -91,6 +101,7 @@ func generateFile(configFile, configData string) (error, bool) {
 	if newHashCode, err = genHashCode(newData); err != nil {
 		return err, false
 	}
+
 	logrus.Debugf("%s hash before: %s", configFile, oldHashCode)
 	logrus.Debugf("%s hash after:  %s", configFile, newHashCode)
 
