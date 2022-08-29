@@ -12,6 +12,7 @@
 - [ ] 支持多系统, 目前主要支持 debian/ubuntu, centos/rocky 支持还不完善
 - [ ] 增加更多的 debug 日志.
 - [ ] 支持通过配置文件来为 k8s service 创建 nginx 虚拟主机, 在配置指定的 k8s service, 则不再检查 annotation, 但是还是会检查 service type 是不是 LoadBalancer 类型.
+- [ ] nginx 延迟 reload, 如果短时间内修改了多个 nginx 配置需要 reload, 不需要频繁 reload nginx, 在指定时间范围内的多次 nginx 配置修改, 只需要 reload nginx 一次就行了.
 
 ## 使用
 
