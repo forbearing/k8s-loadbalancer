@@ -43,17 +43,17 @@ func (n *Nginx) Do(service *Service) bool {
 
 	// prepare nginx
 	// it will check whether nginx config dir exist
-	if err = GetCmdErrMsg(Prepare()); err != nil {
+	if err = Prepare(); err != nil {
 		n.setErr(err)
 		return false
 	}
 	// install nginx if nginx not installed
-	if err = GetCmdErrMsg(Install()); err != nil {
+	if err = Install(); err != nil {
 		n.setErr(err)
 		return false
 	}
 	// enable nginx
-	if err = GetCmdErrMsg(Enabled()); err != nil {
+	if err = Enabled(); err != nil {
 		n.setErr(err)
 		return false
 	}
@@ -66,12 +66,12 @@ func (n *Nginx) Do(service *Service) bool {
 	// if /etc/nginx/nginx.conf changed, test nginx config and reload nginx.
 	if changed {
 		// test nginx configuration
-		if err = GetCmdErrMsg(TestConf()); err != nil {
+		if err = TestConf(); err != nil {
 			n.setErr(err)
 			return false
 		}
 		// reload nginx
-		if err = GetCmdErrMsg(Reload()); err != nil {
+		if err = Reload(); err != nil {
 			n.setErr(err)
 			return false
 		}
@@ -88,12 +88,12 @@ func (n *Nginx) Do(service *Service) bool {
 	// if nginx virtual host config changed, test nginx config and reload nginx.
 	if changed {
 		// test nginx configuration
-		if err = GetCmdErrMsg(TestConf()); err != nil {
+		if err = TestConf(); err != nil {
 			n.setErr(err)
 			return false
 		}
 		// reload nginx
-		if err = GetCmdErrMsg(Reload()); err != nil {
+		if err = Reload(); err != nil {
 			n.setErr(err)
 			return false
 		}
@@ -105,70 +105,70 @@ func (n *Nginx) Do(service *Service) bool {
 
 // Prepare will do check before processing nginx.
 // You should always call Prepare() before do anything to nginx
-func Prepare() (error, int, string) {
+func Prepare() error {
 	return executeCommand([]string{"bash", "-c", NGINX_PREPARE},
 		logger.New().WriterLevel(logrus.DebugLevel),
 		&bytes.Buffer{})
 }
 
 // Install will intall the nginx package in linux.
-func Install() (error, int, string) {
+func Install() error {
 	return executeCommand([]string{"bash", "-c", NGINX_INSTALL},
 		logger.New().WriterLevel(logrus.DebugLevel),
 		&bytes.Buffer{})
 }
 
 // Remove() will uninstall the nginx package in linux.
-func Remove() (error, int, string) {
+func Remove() error {
 	return executeCommand([]string{"bash", "-c", NGINX_REMOVE},
 		logger.New().WriterLevel(logrus.DebugLevel),
 		&bytes.Buffer{})
 }
 
 // Start will start nginx daemon by systemctl.
-func Start() (error, int, string) {
+func Start() error {
 	return executeCommand([]string{"bash", "-c", NGINX_START},
 		logger.New().WriterLevel(logrus.DebugLevel),
 		&bytes.Buffer{})
 }
 
 // Stop will stop nginx daemon by systemctl.
-func Stop() (error, int, string) {
+func Stop() error {
 	return executeCommand([]string{"bash", "-c", NGINX_STOP},
 		logger.New().WriterLevel(logrus.DebugLevel),
 		&bytes.Buffer{})
 }
 
 // Reload will reload nginx daemon by systemctl.
-func Reload() (error, int, string) {
+func Reload() error {
 	return executeCommand([]string{"bash", "-c", NGINX_RELOAD},
 		logger.New().WriterLevel(logrus.DebugLevel),
 		&bytes.Buffer{})
 }
 
 // Restart will restart nginx daemon by systemctl.
-func Restart() (error, int, string) {
+func Restart() error {
 	return executeCommand([]string{"bash", "-c", NGINX_RESTART},
 		logger.New().WriterLevel(logrus.DebugLevel),
 		&bytes.Buffer{})
 }
 
 // EnabledNow will enabled and start nginx daemon by systemctl.
-func EnabledNow() (error, int, string) {
+func EnabledNow() error {
 	return executeCommand([]string{"bash", "-c", NGINX_ENABLENOW},
 		logger.New().WriterLevel(logrus.DebugLevel),
 		&bytes.Buffer{})
 }
 
 // Enabled will enabled nginx daemon by systemctl.
-func Enabled() (error, int, string) {
+func Enabled() error {
 	return executeCommand([]string{"bash", "-c", NGINX_ENABLE},
 		logger.New().WriterLevel(logrus.DebugLevel),
 		&bytes.Buffer{})
 }
 
 // TestConf will test nginx configuration file.
-func TestConf() (error, int, string) {
+func TestConf() error {
 	return executeCommand([]string{"bash", "-c", NGINX_TESTCONF},
 		logger.New().WriterLevel(logrus.DebugLevel),
 		&bytes.Buffer{})
@@ -176,23 +176,42 @@ func TestConf() (error, int, string) {
 
 // executeCommand execute linux command.
 // if command exit code is 0, ignore command stderr output.
-func executeCommand(command []string, stdout io.Writer, errBuf *bytes.Buffer) (error, int, string) {
+func executeCommand(command []string, stdout io.Writer, errBuf *bytes.Buffer) error {
 	cmd := exec.Command(command[0], command[1:]...)
 	cmd.Stdout = stdout
 	cmd.Stderr = errBuf
 	err := cmd.Run()
 	if err != nil {
 		if msg, ok := err.(*exec.ExitError); ok {
-			return err, msg.ExitCode(), errBuf.String()
+			//return err, msg.ExitCode(), errBuf.String()
+			return getCmdErrMsg(err, msg.ExitCode(), errBuf.String())
 		}
-		return err, 0, errBuf.String()
+		return getCmdErrMsg(err, 0, errBuf.String())
 	}
-	return nil, 0, errBuf.String()
+	return getCmdErrMsg(nil, 0, errBuf.String())
 }
 
 // GetCmdErrMsg will return the constructed error message from the error returned by
 // exec.Command and command line stderr output.
 func GetCmdErrMsg(err error, exitCode int, errMsg string) error {
+	if err != nil {
+		if len(errMsg) != 0 {
+			return errors.New(err.Error() + ": " + errMsg)
+		}
+		return errors.New(err.Error())
+	}
+	if exitCode != 0 {
+		if len(errMsg) != 0 {
+			return errors.New("exit status: " + strconv.Itoa(exitCode) + ": " + errMsg)
+		}
+		return errors.New("exit status: " + strconv.Itoa(exitCode))
+	}
+	return nil
+}
+
+// GetCmdErrMsg will return the constructed error message from the error returned by
+// exec.Command and command line stderr output.
+func getCmdErrMsg(err error, exitCode int, errMsg string) error {
 	if err != nil {
 		if len(errMsg) != 0 {
 			return errors.New(err.Error() + ": " + errMsg)
