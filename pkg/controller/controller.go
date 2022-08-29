@@ -103,9 +103,7 @@ func (c *Controller) processNextWorkItem() bool {
 	err := func(obj interface{}) error {
 		defer c.workqueue.Done(obj)
 		if err := c.processNginx(obj); err != nil {
-			//return fmt.Errorf(`error syncing "%+v": %s, requeuing`, obj, err.Error())
-			l.Errorf("Failed to processed nginx config: %s", err.Error())
-			return err
+			return fmt.Errorf("Failed to processed nginx config: %s", err.Error())
 		}
 		c.workqueue.Forget(obj)
 		l.Info("Successfully processed nginx config")
@@ -113,7 +111,7 @@ func (c *Controller) processNextWorkItem() bool {
 	}(obj)
 
 	if err != nil {
-		utilruntime.HandleError(err)
+		logrus.Error(err)
 		return true
 	}
 	return true
