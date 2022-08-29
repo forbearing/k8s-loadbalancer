@@ -21,7 +21,7 @@ import (
 )
 
 const (
-	LoadBalancerAnnotation = "loadbalancer=true"
+	LoadBalancerAnnotation = "loadbalancer=enabled"
 )
 
 type QueueType string
@@ -163,14 +163,10 @@ func (c *Controller) processNginx(obj interface{}) error {
 	if !ok {
 		return fmt.Errorf("object type is not *nginx.Service")
 	}
-	//n := &nginx.Nginx{}
-	//for n.Do(*nginxService) {
-	//}
-	//return n.Err()
-
-	_ = nginxService
-	//logrus.Debug("start process nginx")
-	return nil
+	n := &nginx.Nginx{}
+	for n.Do(nginxService) {
+	}
+	return n.Err()
 }
 
 // addService
@@ -298,12 +294,13 @@ func (c *Controller) constructNginxService(obj interface{}) *nginx.Service {
 		nginxService.MeetAnnotations = true
 	}
 
-	var ports []nginx.Port
+	var ports []nginx.ServicePort
 	for _, p := range svcObj.Spec.Ports {
-		portInfo := nginx.Port{
-			Protocol: string(p.Protocol),
+		portInfo := nginx.ServicePort{
 			Name:     p.Name,
+			Port:     p.Port,
 			NodePort: p.NodePort,
+			Protocol: string(p.Protocol),
 		}
 		ports = append(ports, portInfo)
 	}
