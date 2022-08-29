@@ -3,9 +3,9 @@ package nginx
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
 	"os/exec"
-	"strconv"
 	"sync"
 
 	"github.com/forbearing/k8s-loadbalancer/pkg/logger"
@@ -191,38 +191,38 @@ func executeCommand(command []string, stdout io.Writer, errBuf *bytes.Buffer) er
 	return getCmdErrMsg(nil, 0, errBuf.String())
 }
 
-// GetCmdErrMsg will return the constructed error message from the error returned by
-// exec.Command and command line stderr output.
-func GetCmdErrMsg(err error, exitCode int, errMsg string) error {
-	if err != nil {
-		if len(errMsg) != 0 {
-			return errors.New(err.Error() + ": " + errMsg)
-		}
-		return errors.New(err.Error())
-	}
-	if exitCode != 0 {
-		if len(errMsg) != 0 {
-			return errors.New("exit status: " + strconv.Itoa(exitCode) + ": " + errMsg)
-		}
-		return errors.New("exit status: " + strconv.Itoa(exitCode))
-	}
-	return nil
-}
+//// GetCmdErrMsg will return the constructed error message from the error returned by
+//// exec.Command and command line stderr output.
+//func GetCmdErrMsg(err error, exitCode int, errMsg string) error {
+//    if err != nil {
+//        if len(errMsg) != 0 {
+//            return errors.New(err.Error() + ": " + errMsg)
+//        }
+//        return errors.New(err.Error())
+//    }
+//    if exitCode != 0 {
+//        if len(errMsg) != 0 {
+//            return errors.New("exit status: " + strconv.Itoa(exitCode) + ": " + errMsg)
+//        }
+//        return errors.New("exit status: " + strconv.Itoa(exitCode))
+//    }
+//    return nil
+//}
 
 // GetCmdErrMsg will return the constructed error message from the error returned by
 // exec.Command and command line stderr output.
 func getCmdErrMsg(err error, exitCode int, errMsg string) error {
 	if err != nil {
 		if len(errMsg) != 0 {
-			return errors.New(err.Error() + ": " + errMsg)
+			return fmt.Errorf("%s: %s", err.Error(), errMsg)
 		}
 		return errors.New(err.Error())
 	}
 	if exitCode != 0 {
 		if len(errMsg) != 0 {
-			return errors.New("exit status: " + strconv.Itoa(exitCode) + ": " + errMsg)
+			return fmt.Errorf("exit status: %d: %s", exitCode, errMsg)
 		}
-		return errors.New("exit status: " + strconv.Itoa(exitCode))
+		return fmt.Errorf("exit status: %d", exitCode)
 	}
 	return nil
 }
