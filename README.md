@@ -10,28 +10,38 @@
 
 直接运行.
 
-`go run . --upstream 10.250.16.21,10.250.16.22,10.250.16.23`
+```bash
+go run . --upstream 10.250.16.21,10.250.16.22,10.250.16.23
+```
 
-`go run . --upstream 10.250.16.21,10.250.16.22,10.250.16.23 --kubeconfig youConfig`
+指定 kubeconfig
 
-`go run . --upstream 10.250.16.21,10.250.16.22,10.250.16.23 --kubeconfig yourConfig --log-level debug`
+```bash
+go run . --upstream 10.250.16.21,10.250.16.22,10.250.16.23 --kubeconfig youConfig
+```
+
+指定日志级别
+
+```bash
+go run . --upstream 10.250.16.21,10.250.16.22,10.250.16.23 --kubeconfig yourConfig --log-level debug
+```
 
 或者编译运行
 
-```
+```bash
 go build -o k8s-loadbalancer .
 ./k8s-loadbalancer --upstream 10.250.16.21,10.250.16.22,10.250.16.23 --kubeconfig youConfig
 ```
 
 ## 安装
 
-```
+```bash
 make install
 ```
 
 ## 卸载
 
-```
+```bash
 make uninstall
 ```
 
