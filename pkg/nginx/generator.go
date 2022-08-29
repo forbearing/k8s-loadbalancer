@@ -18,58 +18,9 @@ import (
 // it will return true, if /etc/nginx/nginx.conf changed
 func GenerateNginxConf() (error, bool) {
 	return generateFile(nginxConfFile, TemplateNginxConf)
-	//// if nginx config file not exist, generate it.
-	//if _, err := os.Stat(nginxConfFile); errors.Is(err, os.ErrNotExist) {
-	//    file, err := os.Create(nginxConfFile)
-	//    if err != nil {
-	//        return err, false
-	//    }
-	//    if _, err := file.WriteString(TemplateNginxConf); err != nil {
-	//        return err, false
-	//    }
-	//    file.Close()
-	//    return nil, true
-	//} else if err != nil { // os.Stat error
-	//    return err, false
-	//}
-
-	//// calculate the nginx config file hash.
-	//var (
-	//    err                      error
-	//    oldData, newData         []byte
-	//    oldHashCode, newHashCode string
-	//)
-	//if oldData, err = ioutil.ReadFile(nginxConfFile); err != nil {
-	//    return err, false
-	//}
-	//newData = []byte(TemplateNginxConf)
-	//if oldHashCode, err = genHashCode(oldData); err != nil {
-	//    return err, false
-	//}
-	//if newHashCode, err = genHashCode(newData); err != nil {
-	//    return err, false
-	//}
-	//logrus.Debugf("%s hash before: %s", nginxConfFile, oldHashCode)
-	//logrus.Debugf("%s hash after:  %s", nginxConfFile, newHashCode)
-
-	//// if nginx config file hash code not same, generate the nginx config and overwirte it.
-	//if oldHashCode != newHashCode {
-	//    logrus.Debugf("%s hash is not the same, generate it.", nginxConfFile)
-	//    file, err := os.Create(nginxConfFile)
-	//    if err != nil {
-	//        return err, false
-	//    }
-	//    if _, err := file.Write(newData); err != nil {
-	//        return err, false
-	//    }
-	//    file.Close()
-	//    return nil, true
-	//}
-	//logrus.Debugf("%s hash is same, skip generate it.", nginxConfFile)
-	//return nil, false
 }
 
-// GenerateTCPConf generate /etc/nginx/sites-enabled/xxx.conf config file for proxy tcp traffic.
+// GenerateVirtualHostConf generate /etc/nginx/sites-enabled/xxx.conf config file for proxy traffic.
 func GenerateVirtualHostConf(service *Service) (error, bool) {
 	logrus.Debug("start generate virtual host config file")
 
