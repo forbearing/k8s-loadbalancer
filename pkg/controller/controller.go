@@ -81,7 +81,7 @@ func (c *Controller) Run(workers int, stopCh <-chan struct{}) error {
 	return nil
 }
 
-// processAddQueue()
+// runWorkers()
 func (c *Controller) runWorkers() {
 	for c.processNextWorkItem() {
 	}
