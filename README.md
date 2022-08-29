@@ -6,6 +6,13 @@
 - `--upstream` 用来指定上游主机的 ip 地址或主机名(需要确保你的 LoadBalancer 能解析), 上游主机是安装了 kube-proxy 的 k8s 节点的 ip 地址. 你要确保上游主机可以被该 LoadBalancer 访问.
 - `--kubeconfig` 用来指定你的 kubeconfig 文件, 如果不指定, 默认就是 $HOME/.kube/config 文件.
 
+## TODO
+
+- [ ] 增加 --enable-firewall, 是否为 LoadBalancer 配置防火墙.
+- [ ] 支持多系统, 目前主要支持 debian/ubuntu, centos/rocky 支持还不完善
+- [ ] 增加更多的 debug 日志.
+- [ ] 支持通过配置文件来为 k8s service 创建 nginx 虚拟主机, 在配置指定的 k8s service, 则不再检查 annotation, 但是还是会检查 service type 是不是 LoadBalancer 类型.
+
 ## 使用
 
 直接运行.
@@ -48,12 +55,3 @@ make uninstall
 ## 截图
 
 ![logs](docs/imgs/logs.png)
-
-
-
-## TODO
-
-- [ ] 增加 --enable-firewall, 是否为 LoadBalancer 配置防火墙.
-- [ ] 支持多系统, 目前主要支持 debian/ubuntu, centos/rocky 支持还不完善
-- [ ] 增加更多的 debug 日志.
-- [ ] 支持通过配置文件来为 k8s service 创建 nginx 虚拟主机, 在配置指定的 k8s service, 则不再检查 annotation, 但是还是会检查 service type 是不是 LoadBalancer 类型.
