@@ -62,4 +62,4 @@ systemctl status k8s-loadbalancer
 
 ## 截图
 
-![logs](docs/imgs/logs.png)
+![logs](docs/imgs/k8s-loadbalancer-logs.png)
