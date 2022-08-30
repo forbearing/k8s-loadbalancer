@@ -45,6 +45,9 @@ func init() {
 }
 
 func main() {
+	// init the log-level, log-format, log-output according to the arguments.
+	// you can also call logger.New() to get a new *logrus.Logger that is not
+	// affected by logger.Init().
 	logger.Init()
 
 	// service.NewOrDie will creates a handler which with various methods to
