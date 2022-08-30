@@ -43,7 +43,7 @@ func GenerateVirtualHostConf(service *Service) (error, bool) {
 		configFile := filepath.Join(tcpConfDir, fmt.Sprintf("%s.%s", strings.ToLower(port.Protocol), upstreamName))
 		// the field port.ListenPort, set by annotation, is used to manually specify the nginx listen port.
 		if port.ListenPort != 0 {
-			logrus.Info("use the LisetnPort: ", port.ListenPort)
+			logrus.Debugf("use the LisetnPort: %v", port.ListenPort)
 			configData = fmt.Sprintf(TemplateTCP, upstreamName, upstreamHosts.String(), port.ListenPort, upstreamName, upstreamName)
 		} else {
 			// the configData is string type containing the content of the nginx config file,
