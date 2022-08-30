@@ -3,6 +3,7 @@ package controller
 import (
 	"fmt"
 	"reflect"
+	"strconv"
 	"time"
 
 	"github.com/forbearing/k8s-loadbalancer/pkg/nginx"
@@ -21,7 +22,8 @@ import (
 )
 
 const (
-	LoadBalancerAnnotation = "loadbalancer=enabled"
+	AnnotationLoadBalancer    = "loadbalancer=enabled"
+	AnnotationNginxListenPort = "nginx-listen-port"
 )
 
 type QueueType string
@@ -234,6 +236,10 @@ func (c *Controller) deleteService(obj interface{}) {
 
 // isMeetCondition will check the k8s service object meet the condition to enqueue.
 func (c *Controller) isMeetCondition(logger *logrus.Entry, obj interface{}) bool {
+	// meta.Accessor convert runtime.Object to metav1.Object.
+	// metav1.Object have all kinds of method to get/set k8s object metadata,
+	// such like: GetNamespace/SetNamespace, GetName/SetName, GetLabels/SetLabels, etc.
+	//
 	// if the k8s object don't have metadata, return false
 	accessor, err := meta.Accessor(obj)
 	if err != nil {
@@ -241,46 +247,45 @@ func (c *Controller) isMeetCondition(logger *logrus.Entry, obj interface{}) bool
 		return false
 	}
 
+	// log with k8s service namespace and name fields.
 	l := logger.WithFields(logrus.Fields{
 		"namespace": accessor.GetNamespace(),
 		"name":      accessor.GetName(),
 	})
 
-	serviceType, err := c.serviceHandler.GetType(obj)
-	if err != nil {
-		l.Errorf("service handler get service type error: %s", err.Error())
-		return false
-	}
+	// if obj type is runtime.Object, *corev1.Service or corev1.Service,
+	// GetType() returned error always is nil.
+	serviceType, _ := c.serviceHandler.GetType(obj)
 	// if the k8s service type is not LoadBalancer, return false.
+	// this controller only proxies traffic for k8s service with service type LoadBalancer.
 	if serviceType != string(corev1.ServiceTypeLoadBalancer) {
 		l.Debugf(`service type is "%s", skip enqueue`, serviceType)
 		return false
 	}
 	// if the k8s service don't contains the annotation, return false
-	if !annotations.Has(obj.(runtime.Object), LoadBalancerAnnotation) {
-		l.Debugf(`service don't have annotation: "%s", skip enqueue`, LoadBalancerAnnotation)
+	if !annotations.Has(obj.(runtime.Object), AnnotationLoadBalancer) {
+		l.Debugf(`service don't have annotation: "%s", skip enqueue`, AnnotationLoadBalancer)
 		return false
 	}
 
-	l.Debugf(`service meet condition, start enqueue`)
+	l.Debugf("service meet condition, start enqueue")
 	return true
 }
 
 // constructNginxService
 func (c *Controller) constructNginxService(obj interface{}) *nginx.Service {
+	// obj always is *corev1.Service, it's not necessary to asset.
+	// you should not always return nil but &nginx.Service{}
 	svcObj, ok := obj.(*corev1.Service)
 	if !ok {
 		logrus.Errorf("the object is not *corev1.Service")
-		return nil
+		return &nginx.Service{}
 	}
-	namespace := svcObj.Namespace
-	name := svcObj.Name
 
 	var nginxService = &nginx.Service{
-		Namespace: namespace,
-		Name:      name,
+		Namespace: svcObj.Namespace,
+		Name:      svcObj.Name,
 	}
-
 	serviceType, err := c.serviceHandler.GetType(obj)
 	if err != nil {
 		logrus.Errorf("service handler get service type error: %s", err.Error())
@@ -288,19 +293,25 @@ func (c *Controller) constructNginxService(obj interface{}) *nginx.Service {
 	if serviceType == string(corev1.ServiceTypeLoadBalancer) {
 		nginxService.MeetType = true
 	}
-	if annotations.Has(obj.(runtime.Object), LoadBalancerAnnotation) {
+	if annotations.Has(obj.(runtime.Object), AnnotationLoadBalancer) {
 		nginxService.MeetAnnotations = true
 	}
 
 	var ports []nginx.ServicePort
 	for _, p := range svcObj.Spec.Ports {
-		portInfo := nginx.ServicePort{
+		port := nginx.ServicePort{
 			Name:     p.Name,
 			Port:     p.Port,
 			NodePort: p.NodePort,
 			Protocol: string(p.Protocol),
 		}
-		ports = append(ports, portInfo)
+		// the AnnotationNginxListenPort is a annotation contains nginx listen port
+		listenPortStr := annotations.Get(obj.(runtime.Object), AnnotationNginxListenPort)
+		listenPort, err := strconv.Atoi(listenPortStr)
+		if err == nil {
+			port.ListenPort = int32(listenPort)
+		}
+		ports = append(ports, port)
 	}
 	nginxService.Ports = ports
 	return nginxService
