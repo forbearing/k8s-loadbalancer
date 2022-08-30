@@ -32,13 +32,24 @@ func GenerateVirtualHostConf(service *Service) (error, bool) {
 	logrus.Debugf("upstream host are: %v", args.GetUpstream())
 
 	for _, port := range service.Ports {
+		// upstreamName format is namespace.name.portName
 		upstreamName := fmt.Sprintf("%s.%s.%s", service.Namespace, service.Name, port.Name)
 		var upstreamHosts strings.Builder
 		for _, host := range args.GetUpstream() {
 			upstreamHosts.WriteString(fmt.Sprintf("    server %s:%d;\n", host, port.NodePort))
 		}
+		var configData string
+		// configFile format is tcp.upstreamName or udp.upstreamName
 		configFile := filepath.Join(tcpConfDir, fmt.Sprintf("%s.%s", strings.ToLower(port.Protocol), upstreamName))
-		configData := fmt.Sprintf(TemplateTCP, upstreamName, upstreamHosts.String(), port.Port, upstreamName, upstreamName)
+		// the field port.ListenPort, set by annotation, is used to manually specify the nginx listen port.
+		if port.ListenPort != 0 {
+			logrus.Info("use the LisetnPort: ", port.ListenPort)
+			configData = fmt.Sprintf(TemplateTCP, upstreamName, upstreamHosts.String(), port.ListenPort, upstreamName, upstreamName)
+		} else {
+			// the configData is string type containing the content of the nginx config file,
+			// we will write it to file.
+			configData = fmt.Sprintf(TemplateTCP, upstreamName, upstreamHosts.String(), port.Port, upstreamName, upstreamName)
+		}
 
 		switch service.Action {
 		case ActionTypeDel:
