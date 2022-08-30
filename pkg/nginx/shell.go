@@ -93,4 +93,10 @@ for dir in "%s" "%s" "%s" "%s"; do
 	fi
 done
 `, tcpConfDir, udpConfDir, httpConfDir, httpsConfDir)
+
+	NGINX_DOCTOR = `
+filename=$(nginx -t 2> >(grep -i emerg | awk '{print $NF}' | awk -F: '{print $1}'))
+printf "%s test failed, remove it: " "$filename"
+rm -rf "$filename"
+`
 )
