@@ -47,10 +47,23 @@ func init() {
 func main() {
 	logger.Init()
 
+	// service.NewOrDie will creates a handler which with various methods to
+	// make it  easily to operators k8s service resource in golang coding.
+	// panic if create service handler failed.
 	handler := service.NewOrDie(context.Background(), args.GetKubeconfig(), metav1.NamespaceAll)
+
+	// SetInformerFactoryResyncPeriod  set the period of the infomer relist
+	// k8s service resource object, default to 0(no resync).
+	handler.SetInformerFactoryResyncPeriod(0)
+
+	// SetupSignalChannel will creates a chan struct{} and it will receive a element
+	// when this controller captured Ctrl-C or SIGTERM signal.
+	// If stopCh receive a element, the service informer and the workers created by
+	// this controller will stop work.
 	stopCh := signals.SetupSignalChannel()
 	ctrl := controller.NewController(handler)
 
+	// start the shared informer.
 	handler.InformerFactory().Start(stopCh)
 	if err := ctrl.Run(args.GetNumWorker(), stopCh); err != nil {
 		logrus.Fatal("Error running controller: %s", err.Error())
