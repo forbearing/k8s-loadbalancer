@@ -33,10 +33,11 @@ type Service struct {
 	Action    ActionType
 	Name      string
 	Namespace string
-	Ports     []ServicePort
 
 	MeetType        bool
 	MeetAnnotations bool
+
+	Ports []ServicePort
 }
 
 type ServicePort struct {
@@ -44,4 +45,6 @@ type ServicePort struct {
 	Port     int32
 	NodePort int32
 	Protocol string
+
+	ListenPort int32
 }
