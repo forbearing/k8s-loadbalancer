@@ -68,6 +68,7 @@ func main() {
 
 	// start the shared informer.
 	handler.InformerFactory().Start(stopCh)
+	// block here until this controller capture SIGINT or SIGTERM signal.
 	if err := ctrl.Run(args.GetNumWorker(), stopCh); err != nil {
 		logrus.Fatal("Error running controller: %s", err.Error())
 	}
