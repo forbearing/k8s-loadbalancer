@@ -41,6 +41,9 @@ func (n *Nginx) Do(service *Service) bool {
 	var err error
 	var changed bool
 
+	//// if nginx cann't start, Doctor will make it start.
+	//Doctor()
+
 	// prepare nginx
 	// it will check whether nginx config dir exist
 	if err = Prepare(); err != nil {
@@ -66,14 +69,18 @@ func (n *Nginx) Do(service *Service) bool {
 	// if /etc/nginx/nginx.conf changed, test nginx config and reload nginx.
 	if changed {
 		// test nginx configuration
+		// if test nginx config file failed, delete the test failed config file.
 		if err = TestConf(); err != nil {
 			n.setErr(err)
 			return false
 		}
 		// reload nginx
 		if err = Reload(); err != nil {
-			n.setErr(err)
-			return false
+			// if failed reload nginx, restart nginx.
+			if err = Restart(); err != nil {
+				n.setErr(err)
+				return false
+			}
 		}
 	}
 
@@ -85,14 +92,18 @@ func (n *Nginx) Do(service *Service) bool {
 	// if nginx virtual host config changed, test nginx config and reload nginx.
 	if changed {
 		// test nginx configuration
+		// if test nginx config file failed, delete the test failed config file.
 		if err = TestConf(); err != nil {
 			n.setErr(err)
 			return false
 		}
 		// reload nginx
 		if err = Reload(); err != nil {
-			n.setErr(err)
-			return false
+			// if failed reload nginx, restart nginx.
+			if err = Restart(); err != nil {
+				n.setErr(err)
+				return false
+			}
 		}
 	}
 
@@ -100,66 +111,75 @@ func (n *Nginx) Do(service *Service) bool {
 	return false
 }
 
-// Prepare will do check before processing nginx.
+// Prepare will create the direcotry needed by nginx before processing nginx.
 // You should always call Prepare() before do anything to nginx
 func Prepare() error {
-	return executeCommand([]string{"bash", "-c", NGINX_PREPARE},
+	return executeCommand(
+		[]string{"bash", "-c", NGINX_PREPARE},
 		logger.New().WriterLevel(logrus.DebugLevel),
 		&bytes.Buffer{})
 }
 
 // Install will intall the nginx package in linux.
 func Install() error {
-	return executeCommand([]string{"bash", "-c", NGINX_INSTALL},
+	return executeCommand(
+		[]string{"bash", "-c", NGINX_INSTALL},
 		logger.New().WriterLevel(logrus.DebugLevel),
 		&bytes.Buffer{})
 }
 
 // Remove() will uninstall the nginx package in linux.
 func Remove() error {
-	return executeCommand([]string{"bash", "-c", NGINX_REMOVE},
+	return executeCommand(
+		[]string{"bash", "-c", NGINX_REMOVE},
 		logger.New().WriterLevel(logrus.DebugLevel),
 		&bytes.Buffer{})
 }
 
 // Start will start nginx daemon by systemctl.
 func Start() error {
-	return executeCommand([]string{"bash", "-c", NGINX_START},
+	return executeCommand(
+		[]string{"bash", "-c", NGINX_START},
 		logger.New().WriterLevel(logrus.DebugLevel),
 		&bytes.Buffer{})
 }
 
 // Stop will stop nginx daemon by systemctl.
 func Stop() error {
-	return executeCommand([]string{"bash", "-c", NGINX_STOP},
+	return executeCommand(
+		[]string{"bash", "-c", NGINX_STOP},
 		logger.New().WriterLevel(logrus.DebugLevel),
 		&bytes.Buffer{})
 }
 
 // Reload will reload nginx daemon by systemctl.
 func Reload() error {
-	return executeCommand([]string{"bash", "-c", NGINX_RELOAD},
+	return executeCommand(
+		[]string{"bash", "-c", NGINX_RELOAD},
 		logger.New().WriterLevel(logrus.DebugLevel),
 		&bytes.Buffer{})
 }
 
 // Restart will restart nginx daemon by systemctl.
 func Restart() error {
-	return executeCommand([]string{"bash", "-c", NGINX_RESTART},
+	return executeCommand(
+		[]string{"bash", "-c", NGINX_RESTART},
 		logger.New().WriterLevel(logrus.DebugLevel),
 		&bytes.Buffer{})
 }
 
 // EnabledNow will enabled and start nginx daemon by systemctl.
 func EnabledNow() error {
-	return executeCommand([]string{"bash", "-c", NGINX_ENABLENOW},
+	return executeCommand(
+		[]string{"bash", "-c", NGINX_ENABLENOW},
 		logger.New().WriterLevel(logrus.DebugLevel),
 		&bytes.Buffer{})
 }
 
 // Enabled will enabled nginx daemon by systemctl.
 func Enabled() error {
-	return executeCommand([]string{"bash", "-c", NGINX_ENABLE},
+	return executeCommand(
+		[]string{"bash", "-c", NGINX_ENABLE},
 		logger.New().WriterLevel(logrus.DebugLevel),
 		&bytes.Buffer{})
 }
@@ -167,6 +187,14 @@ func Enabled() error {
 // TestConf will test nginx configuration file.
 func TestConf() error {
 	return executeCommand([]string{"bash", "-c", NGINX_TESTCONF},
+		logger.New().WriterLevel(logrus.DebugLevel),
+		&bytes.Buffer{})
+}
+
+// Doctor will delete the test failed nginx config file.
+func Doctor() error {
+	return executeCommand(
+		[]string{"bash", "-c", NGINX_DOCTOR},
 		logger.New().WriterLevel(logrus.DebugLevel),
 		&bytes.Buffer{})
 }
